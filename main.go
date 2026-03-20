@@ -1,7 +1,7 @@
 package main
 
 import (
-	"aimc-go/server"
+	"aimc-go/app/server"
 )
 
 func main() {

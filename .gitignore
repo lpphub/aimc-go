@@ -4,16 +4,12 @@
 *.dll
 *.so
 *.dylib
-aimc-go
 
 # Test binary
 *.test
 
 # Output
 *.out
-
-# Dependency directories
-vendor/
 
 # IDE
 .idea/
@@ -24,4 +20,20 @@ vendor/
 
 # OS
 .DS_Store
-Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Config
+*.env
+.env.local
+
+# Build
+/bin/
+/dist/
+/build/
+
+# Temp
+tmp/
+*.tmp
