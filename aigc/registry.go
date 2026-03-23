@@ -24,3 +24,11 @@ func (r *Registry) Get(id ModelID) (Model, error) {
 
 	return m, nil
 }
+
+func (r *Registry) List() []ModelID {
+	ids := make([]ModelID, 0, len(r.models))
+	for id := range r.models {
+		ids = append(ids, id)
+	}
+	return ids
+}
