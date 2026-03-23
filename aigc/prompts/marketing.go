@@ -1,10 +1,8 @@
 package prompts
 
-import "aimc-go/aigc"
-
-var Templates = map[aigc.TaskType]string{
-	aigc.TaskMarketingCopy:  MarketingCopyTemplate,
-	aigc.TaskMarketingImage: MarketingImageTemplate,
+var Templates = map[string]string{
+	"marketing_copy":  MarketingCopyTemplate,
+	"marketing_image": MarketingImageTemplate,
 }
 
 const MarketingCopyTemplate = `你是一位资深营销文案专家。请根据以下需求撰写营销文案：
