@@ -15,27 +15,24 @@ func (m *mockModel) Generate(ctx context.Context, req *GenerateRequest) (*Genera
 	return &GenerateResponse{Text: "mock: " + req.Prompt}, nil
 }
 
-func TestClient_MarketingCopy(t *testing.T) {
+func TestClient_Generate_RawPrompt(t *testing.T) {
 	reg := NewRegistry()
-	reg.Register(&mockModel{id: "mock-openai"})
+	reg.Register(&mockModel{id: "model-a"})
 
 	router := NewRouter()
-	router.SetDefault(TaskMarketingCopy, "mock-openai")
+	router.SetDefault(TaskMarketingCopy, "model-a")
 
 	client := NewClient(reg, router)
 
-	resp, err := client.MarketingCopy(context.Background(), "推广运动鞋")
+	resp, err := client.Generate(context.Background(), &GenerateRequest{
+		Task:   TaskMarketingCopy,
+		Prompt: "raw input",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if resp.Text == "" {
-		t.Error("expected non-empty response")
-	}
-
-	expectedText := "mock: 你是一位资深营销文案专家。请根据以下需求撰写营销文案：\n\n需求：推广运动鞋\n\n要求：\n- 语言简洁有力\n- 突出卖点\n- 适合社交媒体传播"
-	if resp.Text != expectedText {
-		t.Errorf("unexpected response: %s", resp.Text)
+	if resp.Text != "mock: raw input" {
+		t.Errorf("expected raw prompt, got: %s", resp.Text)
 	}
 }
 
@@ -57,8 +54,7 @@ func TestClient_Generate_ModelOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedText := "mock: 你是一位资深营销文案专家。请根据以下需求撰写营销文案：\n\n需求：test\n\n要求：\n- 语言简洁有力\n- 突出卖点\n- 适合社交媒体传播"
-	if resp.Text != expectedText {
+	if resp.Text != "mock: test" {
 		t.Errorf("unexpected: %s", resp.Text)
 	}
 }
