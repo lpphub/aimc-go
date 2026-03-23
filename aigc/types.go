@@ -1,19 +1,18 @@
 package aigc
 
-type ContentType string
+type TaskType string
 
 const (
-	ContentText  ContentType = "text"
-	ContentImage ContentType = "image"
-	ContentVideo ContentType = "video"
+	TaskMarketingCopy  TaskType = "marketing_copy"
+	TaskMarketingImage TaskType = "marketing_image"
+	TaskGeneralText    TaskType = "general_text"
 )
 
 type ModelID string
 
 type GenerateRequest struct {
-	Model ModelID
-	Type  ContentType
-
+	Task   TaskType
+	Model  ModelID
 	Prompt string
 	Params map[string]any
 }
@@ -21,6 +20,5 @@ type GenerateRequest struct {
 type GenerateResponse struct {
 	Text string
 	URL  string
-
 	Meta map[string]any
 }

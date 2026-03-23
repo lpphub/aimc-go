@@ -24,7 +24,7 @@ func (c *Client) Generate(ctx context.Context, req *GenerateRequest) (*GenerateR
 func (c *Client) Text(ctx context.Context, model ModelID, prompt string) (*GenerateResponse, error) {
 	return c.Generate(ctx, &GenerateRequest{
 		Model:  model,
-		Type:   ContentText,
+		Task:   TaskGeneralText,
 		Prompt: prompt,
 	})
 }
@@ -32,7 +32,7 @@ func (c *Client) Text(ctx context.Context, model ModelID, prompt string) (*Gener
 func (c *Client) Image(ctx context.Context, model ModelID, prompt string) (*GenerateResponse, error) {
 	return c.Generate(ctx, &GenerateRequest{
 		Model:  model,
-		Type:   ContentImage,
+		Task:   TaskMarketingImage,
 		Prompt: prompt,
 	})
 }
