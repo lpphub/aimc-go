@@ -7,10 +7,7 @@ import (
 )
 
 func TestInit_Defaults(t *testing.T) {
-	err := Init(context.Background(), Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	Init()
 }
 
 func TestGenerate_BeforeInit(t *testing.T) {

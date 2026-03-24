@@ -68,10 +68,10 @@ Maps TaskType to default ModelID. Explicit Model in request overrides default.
 
 ```go
 type Router struct {
-    defaults map[TaskType]ModelID
+    routes map[TaskType]ModelID
 }
 
-func (r *Router) SetDefault(task TaskType, model ModelID)
+func (r *Router) Register(task TaskType, model ModelID)
 func (r *Router) Resolve(req *GenerateRequest) ModelID  // returns req.Model if set, else default
 ```
 
@@ -144,8 +144,8 @@ reg.Register(models.NewOpenAI(os.Getenv("OPENAI_API_KEY")))
 reg.Register(models.NewGemini(ctx, os.Getenv("GEMINI_API_KEY")))
 
 router := aigc.NewRouter()
-router.SetDefault(aigc.TaskMarketingCopy, "openai-gpt4o")
-router.SetDefault(aigc.TaskMarketingImage, "gemini-2.0-flash")
+router.Register(aigc.TaskMarketingCopy, "openai-gpt4o")
+router.Register(aigc.TaskMarketingImage, "gemini-2.0-flash")
 
 client := aigc.NewClient(reg, router)
 

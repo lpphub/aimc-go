@@ -10,44 +10,21 @@ import (
 
 var client *aigc.Client
 
-type Config struct {
-	OpenAIKey  string
-	GeminiKey  string
-	TextModel  aigc.ModelID // default: "openai-gpt4o"
-	ImageModel aigc.ModelID // default: "gemini-2.0-flash"
-}
-
-func Init(ctx context.Context, cfg Config) error {
+func Init() {
 	reg := aigc.NewRegistry()
 
-	if cfg.OpenAIKey != "" {
-		reg.Register(models.NewOpenAI(cfg.OpenAIKey))
-	}
-	if cfg.GeminiKey != "" {
-		gemini, err := models.NewGemini(ctx, cfg.GeminiKey)
-		if err != nil {
-			return fmt.Errorf("init gemini failed: %w", err)
-		}
-		reg.Register(gemini)
-	}
+	om := models.NewOpenAI("")
+	gm, _ := models.NewGemini(context.Background(), "")
+	reg.Register(om)
+	reg.Register(gm)
 
 	router := aigc.NewRouter()
+	router.Register(aigc.TaskMarketingCopy, om.ID())
+	router.Register(aigc.TaskGeneralText, om.ID())
 
-	textModel := cfg.TextModel
-	if textModel == "" {
-		textModel = "openai-gpt4o"
-	}
-	router.SetDefault(aigc.TaskMarketingCopy, textModel)
-	router.SetDefault(aigc.TaskGeneralText, textModel)
-
-	imageModel := cfg.ImageModel
-	if imageModel == "" {
-		imageModel = "gemini-2.0-flash"
-	}
-	router.SetDefault(aigc.TaskMarketingImage, imageModel)
+	router.Register(aigc.TaskMarketingImage, gm.ID())
 
 	client = aigc.NewClient(reg, router)
-	return nil
 }
 
 func Generate(ctx context.Context, req *aigc.GenerateRequest) (*aigc.GenerateResponse, error) {

@@ -20,7 +20,7 @@ func TestClient_Generate_RawPrompt(t *testing.T) {
 	reg.Register(&mockModel{id: "model-a"})
 
 	router := NewRouter()
-	router.SetDefault(TaskMarketingCopy, "model-a")
+	router.Register(TaskMarketingCopy, "model-a")
 
 	client := NewClient(reg, router)
 
@@ -42,7 +42,7 @@ func TestClient_Generate_ModelOverride(t *testing.T) {
 	reg.Register(&mockModel{id: "model-b"})
 
 	router := NewRouter()
-	router.SetDefault(TaskMarketingCopy, "model-a")
+	router.Register(TaskMarketingCopy, "model-a")
 
 	client := NewClient(reg, router)
 

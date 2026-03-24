@@ -165,24 +165,24 @@ func (r *Registry) List() []ModelID {
 package aigc
 
 type Router struct {
-    defaults map[TaskType]ModelID
+    routes map[TaskType]ModelID
 }
 
 func NewRouter() *Router {
     return &Router{
-        defaults: make(map[TaskType]ModelID),
+        routes: make(map[TaskType]ModelID),
     }
 }
 
-func (r *Router) SetDefault(task TaskType, model ModelID) {
-    r.defaults[task] = model
+func (r *Router) Register(task TaskType, model ModelID) {
+    r.routes[task] = model
 }
 
 func (r *Router) Resolve(req *GenerateRequest) ModelID {
     if req.Model != "" {
         return req.Model
     }
-    return r.defaults[req.Task]
+    return r.routes[req.Task]
 }
 ```
 
@@ -197,7 +197,7 @@ import "testing"
 
 func TestRouter_Resolve_ExplicitOverride(t *testing.T) {
     r := NewRouter()
-    r.SetDefault(TaskMarketingCopy, "openai-gpt4o")
+    r.Register(TaskMarketingCopy, "openai-gpt4o")
 
     req := &GenerateRequest{
         Task:  TaskMarketingCopy,
@@ -212,7 +212,7 @@ func TestRouter_Resolve_ExplicitOverride(t *testing.T) {
 
 func TestRouter_Resolve_Default(t *testing.T) {
     r := NewRouter()
-    r.SetDefault(TaskMarketingCopy, "openai-gpt4o")
+    r.Register(TaskMarketingCopy, "openai-gpt4o")
 
     req := &GenerateRequest{Task: TaskMarketingCopy}
 
@@ -389,7 +389,7 @@ func TestClient_MarketingCopy(t *testing.T) {
     reg.Register(&mockModel{id: "mock-openai"})
 
     router := NewRouter()
-    router.SetDefault(TaskMarketingCopy, "mock-openai")
+    router.Register(TaskMarketingCopy, "mock-openai")
 
     client := NewClient(reg, router)
 
@@ -413,7 +413,7 @@ func TestClient_Generate_ModelOverride(t *testing.T) {
     reg.Register(&mockModel{id: "model-b"})
 
     router := NewRouter()
-    router.SetDefault(TaskMarketingCopy, "model-a")
+    router.Register(TaskMarketingCopy, "model-a")
 
     client := NewClient(reg, router)
 

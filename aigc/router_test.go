@@ -4,7 +4,7 @@ import "testing"
 
 func TestRouter_Resolve_ExplicitOverride(t *testing.T) {
 	r := NewRouter()
-	r.SetDefault(TaskMarketingCopy, "openai-gpt4o")
+	r.Register(TaskMarketingCopy, "openai-gpt4o")
 
 	req := &GenerateRequest{
 		Task:  TaskMarketingCopy,
@@ -19,7 +19,7 @@ func TestRouter_Resolve_ExplicitOverride(t *testing.T) {
 
 func TestRouter_Resolve_Default(t *testing.T) {
 	r := NewRouter()
-	r.SetDefault(TaskMarketingCopy, "openai-gpt4o")
+	r.Register(TaskMarketingCopy, "openai-gpt4o")
 
 	req := &GenerateRequest{Task: TaskMarketingCopy}
 
