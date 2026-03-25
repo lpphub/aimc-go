@@ -1,7 +1,7 @@
 package models
 
 import (
-	"aimc-go/aigc"
+	"aimc-go/aigc/core"
 	"context"
 	"fmt"
 
@@ -20,20 +20,20 @@ func NewOpenAI(apiKey string) *OpenAI {
 	}
 }
 
-func (m *OpenAI) ID() aigc.ModelID {
+func (m *OpenAI) ID() core.ModelID {
 	return "openai-gpt4o"
 }
 
-func (m *OpenAI) Generate(ctx context.Context, req *aigc.GenerateRequest) (*aigc.GenerateResponse, error) {
+func (m *OpenAI) Generate(ctx context.Context, req *core.GenerateRequest) (*core.GenerateResponse, error) {
 	switch req.Task {
-	case aigc.TaskMarketingImage:
+	case core.TaskMarketingImage:
 		return m.generateImage(ctx, req)
 	default:
 		return m.generateText(ctx, req)
 	}
 }
 
-func (m *OpenAI) generateText(ctx context.Context, req *aigc.GenerateRequest) (*aigc.GenerateResponse, error) {
+func (m *OpenAI) generateText(ctx context.Context, req *core.GenerateRequest) (*core.GenerateResponse, error) {
 	resp, err := m.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: m.model,
 		Messages: []openai.ChatCompletionMessage{
@@ -45,7 +45,7 @@ func (m *OpenAI) generateText(ctx context.Context, req *aigc.GenerateRequest) (*
 	}
 
 	text := resp.Choices[0].Message.Content
-	return &aigc.GenerateResponse{
+	return &core.GenerateResponse{
 		Text: text,
 		Meta: map[string]any{
 			"usage": resp.Usage,
@@ -53,7 +53,7 @@ func (m *OpenAI) generateText(ctx context.Context, req *aigc.GenerateRequest) (*
 	}, nil
 }
 
-func (m *OpenAI) generateImage(ctx context.Context, req *aigc.GenerateRequest) (*aigc.GenerateResponse, error) {
+func (m *OpenAI) generateImage(ctx context.Context, req *core.GenerateRequest) (*core.GenerateResponse, error) {
 	size := openai.CreateImageSize1792x1024
 	if s, ok := req.Params["size"].(string); ok {
 		size = s
@@ -69,7 +69,7 @@ func (m *OpenAI) generateImage(ctx context.Context, req *aigc.GenerateRequest) (
 		return nil, fmt.Errorf("openai image generation failed: %w", err)
 	}
 
-	return &aigc.GenerateResponse{
+	return &core.GenerateResponse{
 		URL: resp.Data[0].URL,
 	}, nil
 }
