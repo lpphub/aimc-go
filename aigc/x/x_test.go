@@ -1,7 +1,7 @@
 package x
 
 import (
-	"aimc-go/aigc"
+	"aimc-go/aigc/core"
 	"context"
 	"testing"
 )
@@ -13,8 +13,8 @@ func TestInit_Defaults(t *testing.T) {
 func TestGenerate_BeforeInit(t *testing.T) {
 	// Reset client
 	client = nil
-	_, err := Generate(context.Background(), &aigc.GenerateRequest{
-		Task:   aigc.TaskMarketingCopy,
+	_, err := Generate(context.Background(), &core.GenerateRequest{
+		Task:   core.TaskMarketingCopy,
 		Prompt: "test",
 	})
 	if err == nil {

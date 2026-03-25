@@ -1,57 +1,62 @@
 package x
 
 import (
-	"aimc-go/aigc"
+	"aimc-go/aigc/core"
 	"aimc-go/aigc/models"
 	"aimc-go/aigc/prompts"
 	"context"
 	"fmt"
 )
 
-var client *aigc.Client
+var client *core.Client
 
 func Init() {
-	reg := aigc.NewRegistry()
+	reg := core.NewRegistry()
 
 	om := models.NewOpenAI("")
-	gm, _ := models.NewGemini(context.Background(), "")
 	reg.Register(om)
-	reg.Register(gm)
 
-	router := aigc.NewRouter()
-	router.Register(aigc.TaskMarketingCopy, om.ID())
-	router.Register(aigc.TaskGeneralText, om.ID())
+	gm, err := models.NewGemini(context.Background(), "")
+	if err == nil {
+		reg.Register(gm)
+	}
 
-	router.Register(aigc.TaskMarketingImage, gm.ID())
+	router := core.NewRouter()
+	router.Register(core.TaskMarketingCopy, om.ID())
+	router.Register(core.TaskGeneralText, om.ID())
 
-	client = aigc.NewClient(reg, router)
+	if gm != nil {
+		router.Register(core.TaskMarketingImage, gm.ID())
+	}
+
+	client = core.NewClient(reg, router)
 }
 
-func Generate(ctx context.Context, req *aigc.GenerateRequest) (*aigc.GenerateResponse, error) {
+func Generate(ctx context.Context, req *core.GenerateRequest) (*core.GenerateResponse, error) {
 	if client == nil {
 		return nil, fmt.Errorf("x not initialized, call x.Init() first")
 	}
 	return client.Generate(ctx, req)
 }
 
-func MarketingCopy(ctx context.Context, input string) (*aigc.GenerateResponse, error) {
+func MarketingCopy(ctx context.Context, input string) (*core.GenerateResponse, error) {
 	prompt, err := prompts.PromptMarketingCopy(input)
 	if err != nil {
 		return nil, err
 	}
-	return Generate(ctx, &aigc.GenerateRequest{
-		Task:   aigc.TaskMarketingCopy,
+	return Generate(ctx, &core.GenerateRequest{
+		Task:   core.TaskMarketingCopy,
 		Prompt: prompt,
 	})
 }
 
-func MarketingImage(ctx context.Context, input string) (*aigc.GenerateResponse, error) {
+func MarketingImage(ctx context.Context, input string) (*core.GenerateResponse, error) {
 	prompt, err := prompts.PromptMarketingImage(input)
 	if err != nil {
 		return nil, err
 	}
-	return Generate(ctx, &aigc.GenerateRequest{
-		Task:   aigc.TaskMarketingImage,
+	return Generate(ctx, &core.GenerateRequest{
+		Task:   core.TaskMarketingImage,
 		Prompt: prompt,
 	})
 }
