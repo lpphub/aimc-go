@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	agent.MultiTurnChat()
+	agent.DeepAgent()
 }

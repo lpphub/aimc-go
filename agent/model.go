@@ -13,7 +13,7 @@ const (
 	BaseURL = "https://api.deepseek.com"
 
 	APIKeyBL  = "sk-sp-ac76140d6ae04e939ad6b82d71c2ea31"
-	ModelBL   = "qwen3-max-2026-01-23"
+	ModelBL   = "glm-5"
 	BaseURLBL = "https://coding.dashscope.aliyuncs.com/v1"
 )
 
