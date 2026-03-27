@@ -72,7 +72,7 @@ func MultiTurnChat() {
 		EnableStreaming: true,
 	})
 
-	store, err := NewJSONLStore("./tmp/sessions")
+	store, err := NewJSONLStore("./data/sessions")
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -169,7 +169,7 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 		EnableStreaming: true,
 	})
 
-	store, err := NewJSONLStore("./tmp/sessions")
+	store, err := NewJSONLStore("./data/sessions")
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -203,8 +203,6 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 
 		assistantMsg := schema.AssistantMessage(content, nil)
 		_ = session.Append(assistantMsg)
-
-		history = append(history, schema.AssistantMessage(content, nil))
 	}
 	if err := scanner.Err(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
