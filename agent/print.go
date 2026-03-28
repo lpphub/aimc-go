@@ -24,56 +24,6 @@ func printAndCollectAssistantFromEvents(events *adk.AsyncIterator[*adk.AgentEven
 		if event.Err != nil {
 			return "", event.Err
 		}
-		if event.Output == nil || event.Output.MessageOutput == nil {
-			continue
-		}
-
-		mo := event.Output.MessageOutput
-		if mo.Role != schema.Assistant {
-			continue
-		}
-
-		if mo.IsStreaming {
-			mo.MessageStream.SetAutomaticClose()
-			for {
-				frame, err := mo.MessageStream.Recv()
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				if err != nil {
-					return "", err
-				}
-				if frame != nil && frame.Content != "" {
-					sb.WriteString(frame.Content)
-					_, _ = fmt.Fprint(os.Stdout, frame.Content)
-				}
-			}
-			_, _ = fmt.Fprintln(os.Stdout)
-			continue
-		}
-
-		if mo.Message != nil {
-			sb.WriteString(mo.Message.Content)
-			_, _ = fmt.Fprintln(os.Stdout, mo.Message.Content)
-		} else {
-			_, _ = fmt.Fprintln(os.Stdout)
-		}
-	}
-
-	return sb.String(), nil
-}
-
-func printAndCollectAssistantWithToolsFromEvents(events *adk.AsyncIterator[*adk.AgentEvent]) (string, error) {
-	var sb strings.Builder
-
-	for {
-		event, ok := events.Next()
-		if !ok {
-			break
-		}
-		if event.Err != nil {
-			return "", event.Err
-		}
 
 		if event.Output != nil && event.Output.MessageOutput != nil {
 			mv := event.Output.MessageOutput
@@ -130,6 +80,79 @@ func printAndCollectAssistantWithToolsFromEvents(events *adk.AsyncIterator[*adk.
 	}
 
 	return sb.String(), nil
+}
+
+func printAndCollectAssistantWithInterruptFromEvents(events *adk.AsyncIterator[*adk.AgentEvent]) (string, *adk.InterruptInfo, error) {
+	var sb strings.Builder
+	var interruptInfo *adk.InterruptInfo
+
+	for {
+		event, ok := events.Next()
+		if !ok {
+			break
+		}
+		if event.Err != nil {
+			return "", nil, event.Err
+		}
+
+		if event.Action != nil && event.Action.Interrupted != nil {
+			interruptInfo = event.Action.Interrupted
+			continue
+		}
+
+		if event.Output != nil && event.Output.MessageOutput != nil {
+			mv := event.Output.MessageOutput
+			if mv.Role == schema.Tool {
+				content := drainToolResult(mv)
+				fmt.Printf("[tool result] %s\n", truncate(content, 200))
+				continue
+			}
+
+			if mv.Role != schema.Assistant && mv.Role != "" {
+				continue
+			}
+
+			if mv.IsStreaming {
+				mv.MessageStream.SetAutomaticClose()
+				var accumulatedToolCalls []schema.ToolCall
+				for {
+					frame, err := mv.MessageStream.Recv()
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					if err != nil {
+						return "", nil, err
+					}
+					if frame != nil {
+						if frame.Content != "" {
+							sb.WriteString(frame.Content)
+							_, _ = fmt.Fprint(os.Stdout, frame.Content)
+						}
+						if len(frame.ToolCalls) > 0 {
+							accumulatedToolCalls = append(accumulatedToolCalls, frame.ToolCalls...)
+						}
+					}
+				}
+				for _, tc := range accumulatedToolCalls {
+					if tc.Function.Name != "" && tc.Function.Arguments != "" {
+						fmt.Printf("\n[tool call] %s(%s)\n", tc.Function.Name, tc.Function.Arguments)
+					}
+				}
+				_, _ = fmt.Fprintln(os.Stdout)
+				continue
+			}
+
+			if mv.Message != nil {
+				sb.WriteString(mv.Message.Content)
+				_, _ = fmt.Fprintln(os.Stdout, mv.Message.Content)
+				for _, tc := range mv.Message.ToolCalls {
+					fmt.Printf("[tool call] %s(%s)\n", tc.Function.Name, tc.Function.Arguments)
+				}
+			}
+		}
+	}
+
+	return sb.String(), interruptInfo, nil
 }
 
 func drainToolResult(mo *adk.MessageVariant) string {

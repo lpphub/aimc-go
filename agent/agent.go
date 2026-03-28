@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	adkstore "github.com/cloudwego/eino-examples/adk/common/store"
 	localbk "github.com/cloudwego/eino-ext/adk/backend/local"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
@@ -121,10 +122,7 @@ func DeepAgent() {
 	ctx := context.Background()
 	cm, _ := newChatModel(ctx)
 
-	sessionID := "5a5819ae-0225-4d09-b929-6f644e5fb897"
 	projectRoot := "/home/lsk/projects/eino-demo"
-	backend, _ := localbk.NewBackend(ctx, &localbk.Config{})
-
 	// 创建 DeepAgent,自动注册文件系统工具
 	prompt := fmt.Sprintf(`You are a helpful assistant that helps users learn the Eino framework.
 
@@ -138,6 +136,7 @@ The project root directory is: %s
 
 Always use absolute paths when calling filesystem tools.`, projectRoot, projectRoot, projectRoot, projectRoot)
 
+	backend, _ := localbk.NewBackend(ctx, &localbk.Config{})
 	agent, err := deep.New(ctx, &deep.Config{
 		Name:           "Ch04ToolAgent",
 		Description:    "ChatWithDoc agent with filesystem access via LocalBackend.",
@@ -148,6 +147,7 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 		MaxIteration:   50,
 		Handlers: []adk.ChatModelAgentMiddleware{
 			&safeToolMiddleware{}, // 将 Tool 错误转换为字符串
+			//&approvalMiddleware{},
 		},
 		ModelRetryConfig: &adk.ModelRetryConfig{
 			MaxRetries: 3,
@@ -167,6 +167,7 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 	runner := adk.NewRunner(ctx, adk.RunnerConfig{
 		Agent:           agent,
 		EnableStreaming: true,
+		CheckPointStore: adkstore.NewInMemoryStore(),
 	})
 
 	store, err := NewJSONLStore("./data/sessions")
@@ -175,10 +176,11 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 		os.Exit(1)
 	}
 
+	sessionID := "3e2349cb-04ed-483b-9958-f5973029b39a"
 	session, _ := store.GetOrCreate(sessionID)
+	checkPointID := sessionID
 
 	scanner := bufio.NewScanner(os.Stdin)
-
 	for {
 		_, _ = fmt.Fprint(os.Stdout, "you> ")
 		if !scanner.Scan() {
@@ -193,12 +195,19 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 		_ = session.Append(userMsg)
 
 		history := session.GetMessages()
-
-		events := runner.Run(ctx, history)
-		content, err := printAndCollectAssistantWithToolsFromEvents(events)
+		events := runner.Run(ctx, history, adk.WithCheckPointID(checkPointID))
+		content, interrupt, err := printAndCollectAssistantWithInterruptFromEvents(events)
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
+		}
+
+		if interrupt != nil {
+			content, err = handleInterrupt(ctx, runner, checkPointID, interrupt, scanner)
+			if err != nil {
+				_, _ = fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		}
 
 		assistantMsg := schema.AssistantMessage(content, nil)
