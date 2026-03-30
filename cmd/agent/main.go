@@ -1,8 +1,6 @@
 package main
 
-import (
-	"aimc-go/agent"
-)
+import "aimc-go/agent"
 
 func main() {
 	agent.DeepAgent()

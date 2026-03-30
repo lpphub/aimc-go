@@ -13,7 +13,10 @@ import (
 	localbk "github.com/cloudwego/eino-ext/adk/backend/local"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
+	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 )
 
 func SimpleChat() {
@@ -137,6 +140,16 @@ The project root directory is: %s
 Always use absolute paths when calling filesystem tools.`, projectRoot, projectRoot, projectRoot, projectRoot)
 
 	backend, _ := localbk.NewBackend(ctx, &localbk.Config{})
+	ragTool, _ := BuildTool(ctx, cm)
+	skillsMiddleware, skErr := SkillMiddleware(ctx, backend)
+	if skErr != nil {
+		_, _ = fmt.Fprintln(os.Stderr, skErr)
+		os.Exit(1)
+	}
+
+	// middlewares
+	handlers := []adk.ChatModelAgentMiddleware{skillsMiddleware, &approvalMiddleware{}, &safeToolMiddleware{}}
+
 	agent, err := deep.New(ctx, &deep.Config{
 		Name:           "Ch04ToolAgent",
 		Description:    "ChatWithDoc agent with filesystem access via LocalBackend.",
@@ -145,10 +158,7 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 		Backend:        backend, // 提供文件系统操作能力
 		StreamingShell: backend, // 提供命令执行能力
 		MaxIteration:   50,
-		Handlers: []adk.ChatModelAgentMiddleware{
-			&safeToolMiddleware{}, // 将 Tool 错误转换为字符串
-			//&approvalMiddleware{},
-		},
+		Handlers:       handlers,
 		ModelRetryConfig: &adk.ModelRetryConfig{
 			MaxRetries: 3,
 			IsRetryAble: func(ctx context.Context, err error) bool {
@@ -156,6 +166,11 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 				return strings.Contains(err.Error(), "429") ||
 					strings.Contains(err.Error(), "Too Many Requests") ||
 					strings.Contains(err.Error(), "qpm limit")
+			},
+		},
+		ToolsConfig: adk.ToolsConfig{
+			ToolsNodeConfig: compose.ToolsNodeConfig{
+				Tools: []tool.BaseTool{ragTool},
 			},
 		},
 	})
@@ -176,7 +191,7 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 		os.Exit(1)
 	}
 
-	sessionID := "3e2349cb-04ed-483b-9958-f5973029b39a"
+	sessionID := uuid.New().String()
 	session, _ := store.GetOrCreate(sessionID)
 	checkPointID := sessionID
 
