@@ -1,7 +1,7 @@
 package main
 
-import "aimc-go/agent"
+import "aimc-go/assistant"
 
 func main() {
-	agent.DeepAgent()
+	assistant.ChatAgent()
 }

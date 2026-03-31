@@ -29,7 +29,7 @@ type Session struct {
 	persist func(sessionID string, msg *schema.Message) error
 }
 
-// Append adds a message to memory and persists it to storage.
+// Append adds a message to memory and persists it to store.
 func (s *Session) Append(msg *schema.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -28,7 +28,7 @@ func New(cfg Config) (adk.Agent, error) {
 	}
 
 	// 工具
-	cfgTools, err := tools.InitTools()
+	innerTools, err := tools.InitTools()
 	if err != nil {
 		return nil, fmt.Errorf("init tools: %w", err)
 	}
@@ -48,7 +48,7 @@ func New(cfg Config) (adk.Agent, error) {
 		Model:         cm,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
-				Tools: cfgTools,
+				Tools: innerTools,
 			},
 		},
 		Handlers: middlewares,

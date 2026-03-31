@@ -12,8 +12,9 @@ import (
 )
 
 type EventContext struct {
-	Ctx    context.Context
-	Writer *strings.Builder
+	Ctx       context.Context
+	Collector *strings.Builder // for assistant
+	Writer    *MsgWriter       // assistant output
 }
 
 type EventHandler interface {
@@ -47,7 +48,7 @@ type ErrorHandler struct{}
 
 func (h *ErrorHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool, error) {
 	if event.Err != nil {
-		fmt.Printf("❌ %v\n", event.Err)
+		ctx.Writer.Output("❌ %v\n", event.Err)
 		return true, event.Err
 	}
 	return false, nil
@@ -61,15 +62,15 @@ func (h *ActionHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool, 
 	}
 
 	if event.Action.Interrupted != nil {
-		fmt.Println("⏸️ interrupted")
+		ctx.Writer.Output("%s \n", "⏸️ interrupted")
 	}
 
 	if event.Action.TransferToAgent != nil {
-		fmt.Printf("➡️ transfer to %s\n", event.Action.TransferToAgent.DestAgentName)
+		ctx.Writer.Output("➡️ transfer to %s\n", event.Action.TransferToAgent.DestAgentName)
 	}
 
 	if event.Action.Exit {
-		fmt.Println("🏁 exit")
+		ctx.Writer.Output("%s \n", "🏁 exit")
 	}
 
 	return true, nil
@@ -89,7 +90,8 @@ func (h *ToolHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool, er
 	}
 
 	result := drainToolResult(mv)
-	fmt.Printf("🔧 tool result [%s]: %s\n", mv.ToolName, truncate(result, 200))
+
+	ctx.Writer.Output("🔧 tool result [%s]: %s\n", mv.ToolName, truncate(result, 200))
 
 	return true, nil
 }
@@ -107,14 +109,13 @@ func (h *MessageHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool,
 		return false, nil
 	}
 
-	var content string
 	var err error
 
 	switch {
 	case mv.IsStreaming:
-		content, err = h.handleStreaming(ctx, mv)
+		err = h.handleStreaming(ctx, mv)
 	default:
-		content, err = h.handleNonStreaming(ctx, mv)
+		err = h.handleNonStreaming(ctx, mv)
 	}
 
 	if err != nil {
@@ -124,11 +125,10 @@ func (h *MessageHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool,
 	return true, nil
 }
 
-func (h *MessageHandler) handleStreaming(ec *EventContext, mv *adk.MessageVariant) (string, error) {
+func (h *MessageHandler) handleStreaming(ec *EventContext, mv *adk.MessageVariant) error {
 	mv.MessageStream.SetAutomaticClose()
 
-	var sb strings.Builder
-	var toolCalls []schema.ToolCall
+	var accumulatedToolCalls []schema.ToolCall
 
 	for {
 		frame, err := mv.MessageStream.Recv()
@@ -136,39 +136,82 @@ func (h *MessageHandler) handleStreaming(ec *EventContext, mv *adk.MessageVarian
 			break
 		}
 		if err != nil {
-			return "", err
+			return err
 		}
 		if frame == nil {
 			continue
 		}
 
 		if frame.Content != "" {
-			sb.WriteString(frame.Content)
-			ec.Writer.WriteString(frame.Content)
-			fmt.Print(frame.Content)
+			ec.Collector.WriteString(frame.Content)
+			ec.Writer.Output("%s", frame.Content)
 		}
 
 		if len(frame.ToolCalls) > 0 {
-			toolCalls = append(toolCalls, frame.ToolCalls...)
+			accumulatedToolCalls = append(accumulatedToolCalls, frame.ToolCalls...)
 		}
 	}
 
-	printToolCalls(toolCalls)
-	fmt.Println()
+	if len(accumulatedToolCalls) > 0 {
+		for _, tc := range accumulatedToolCalls {
+			ec.Writer.Output("🔧 tool call [%s]: %s\n", tc.Function.Name, truncate(tc.Function.Arguments, 200))
+		}
+	}
 
-	return sb.String(), nil
+	ec.Writer.Output("\n")
+
+	return nil
 }
 
-func (h *MessageHandler) handleNonStreaming(ec *EventContext, mv *adk.MessageVariant) (string, error) {
+func (h *MessageHandler) handleNonStreaming(ec *EventContext, mv *adk.MessageVariant) error {
 	if mv.Message == nil {
-		return "", nil
+		return nil
 	}
 
 	content := mv.Message.Content
-	ec.Writer.WriteString(content)
+	ec.Collector.WriteString(content)
 
-	fmt.Println(content)
-	printToolCalls(mv.Message.ToolCalls)
+	ec.Writer.Output("%s", content)
 
-	return content, nil
+	for _, tc := range mv.Message.ToolCalls {
+		ec.Writer.Output("🔧 tool call [%s]: %s\n", tc.Function.Name, truncate(tc.Function.Arguments, 200))
+	}
+
+	return nil
+}
+
+func drainToolResult(mo *adk.MessageVariant) string {
+	if mo.IsStreaming && mo.MessageStream != nil {
+		var sb strings.Builder
+		for {
+			chunk, err := mo.MessageStream.Recv()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				break
+			}
+			if chunk != nil && chunk.Content != "" {
+				sb.WriteString(chunk.Content)
+			}
+		}
+		return sb.String()
+	}
+	if mo.Message != nil {
+		return mo.Message.Content
+	}
+	return ""
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+type MsgWriter struct{}
+
+func (po *MsgWriter) Output(format string, args ...any) {
+	fmt.Printf(format, args...)
 }

@@ -111,7 +111,6 @@ func MultiTurnChat() {
 		assistantMsg := schema.AssistantMessage(content, nil)
 		_ = session.Append(assistantMsg)
 
-		history = append(history, schema.AssistantMessage(content, nil))
 	}
 	if err := scanner.Err(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
