@@ -33,19 +33,6 @@ func WithSink(s sink.Sink) RunnerOption {
 	}
 }
 
-// DefaultStore returns a JSONL store at the given directory.
-func DefaultStore(dir string) store.Store {
-	return &store.JSONLStore{
-		Dir:   dir,
-		Cache: make(map[string]*store.Session),
-	}
-}
-
-// DefaultSink returns a stdout sink.
-func DefaultSink() sink.Sink {
-	return &sink.StdoutSink{}
-}
-
 func NewRunner(agent adk.Agent, opts ...RunnerOption) (*Runner, error) {
 	r := &Runner{
 		inner: adk.NewRunner(context.Background(), adk.RunnerConfig{

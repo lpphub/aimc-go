@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"aimc-go/assistant/agent/middleware"
-	"aimc-go/assistant/agent/tools"
 	"context"
 	"fmt"
 
@@ -23,16 +21,6 @@ type AgentConfig struct {
 	Middlewares []adk.ChatModelAgentMiddleware // required
 }
 
-// DefaultTools returns the built-in tools (RAG + search).
-func DefaultTools(cm model.BaseChatModel) ([]tool.BaseTool, error) {
-	return tools.InitTools(cm)
-}
-
-// DefaultMiddlewares returns the built-in infra middlewares.
-func DefaultMiddlewares(ctx context.Context, cm model.BaseChatModel, cfg middleware.Config) ([]adk.ChatModelAgentMiddleware, error) {
-	return middleware.SetupMiddlewares(ctx, cm, cfg)
-}
-
 func New(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
 	if cfg.Model == nil {
 		return nil, fmt.Errorf("model is required")
@@ -44,7 +32,7 @@ func New(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
 		return nil, fmt.Errorf("middlewares is required, use agent.DefaultMiddlewares(ctx, cm, middleware.Config{}) for built-in middlewares")
 	}
 	if cfg.MaxIterations == 0 {
-		cfg.MaxIterations = 30
+		cfg.MaxIterations = 50
 	}
 
 	ag, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{

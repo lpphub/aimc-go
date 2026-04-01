@@ -3,6 +3,7 @@ package assistant
 import (
 	"aimc-go/assistant/agent"
 	"aimc-go/assistant/agent/llm"
+	"aimc-go/assistant/agent/middleware"
 	"aimc-go/assistant/agent/prompts"
 	"bufio"
 	"context"
@@ -16,27 +17,47 @@ import (
 func Agent() {
 	ctx := context.Background()
 
-	// 1. 创建 model（调用方决定配置）
+	// 1. model
 	cm, err := llm.NewChatModel(ctx, llm.DefaultConfig())
 	if err != nil {
 		panic(err)
 	}
 
-	// 2. 创建 agent（依赖注入，tools/middlewares 未指定则用默认值）
+	// 2. tools — 使用默认工具集
+	agentTools, err := agent.DefaultTools(cm)
+	if err != nil {
+		panic(err)
+	}
+
+	// 3. middlewares — 使用默认中间件
+	middlewares, err := agent.DefaultMiddlewares(ctx, cm, middleware.Config{})
+	if err != nil {
+		panic(err)
+	}
+
+	// 4. agent
 	projectRoot := "/home/lsk/projects/eino-demo"
 	ag, err := agent.New(ctx, agent.AgentConfig{
 		Name:          "enio-assistant",
 		Description:   "enio tutorial assistant",
 		Instruction:   fmt.Sprintf(prompts.EinoTutorial, projectRoot, projectRoot, projectRoot, projectRoot),
 		Model:         cm,
+		Tools:         agentTools,
+		Middlewares:   middlewares,
 		MaxIterations: 30,
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	// 3. 创建 runner（未指定 store/sink 则用默认值）
-	runner := agent.NewRunner(ag)
+	// 5. runner — 使用默认 store/sink
+	runner, err := agent.NewRunner(ag,
+		agent.WithStore(agent.DefaultStore("./data/sessions")),
+		agent.WithSink(agent.DefaultSink()),
+	)
+	if err != nil {
+		panic(err)
+	}
 
 	sessionID := uuid.New().String()
 
