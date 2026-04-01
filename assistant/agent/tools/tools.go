@@ -1,10 +1,9 @@
 package tools
 
 import (
-	"aimc-go/assistant/agent/llm"
-	"context"
 	"fmt"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 )
 
@@ -29,31 +28,15 @@ func (r *Registry) GetAll() []tool.BaseTool {
 	return r.tools
 }
 
-// InitTools 初始化所有内置工具
-func InitTools() ([]tool.BaseTool, error) {
+// InitTools 初始化所有内置工具。cm 是工具所需的模型（例如 RAG）。
+func InitTools(cm model.BaseChatModel) ([]tool.BaseTool, error) {
 	registry := NewRegistry()
 
-	ctx := context.Background()
-	cm, _ := llm.NewChatModel(ctx)
-	ragTool, err := BuildRAGTool(ctx, cm)
+	ragTool, err := BuildRAGTool(nil, cm)
 	if err != nil {
 		return nil, fmt.Errorf("build rag tool: %w", err)
 	}
 	registry.Register(ragTool)
-
-	//// 注册天气工具
-	//weatherTool, err := NewWeatherTool()
-	//if err != nil {
-	//	return nil, fmt.Errorf("failed to create weather tool: %w", err)
-	//}
-	//registry.Register(weatherTool)
-	//
-	//// 注册计算器工具
-	//calcTool, err := NewCalculatorTool()
-	//if err != nil {
-	//	return nil, fmt.Errorf("failed to create calculator tool: %w", err)
-	//}
-	//registry.Register(calcTool)
 
 	// 注册搜索工具
 	searchTool, err := NewSearchTool()
