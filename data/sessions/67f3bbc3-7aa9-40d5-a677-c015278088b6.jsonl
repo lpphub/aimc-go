@@ -1,3 +1,0 @@
-{"created_at":"2026-04-01T14:52:27.671116Z","id":"67f3bbc3-7aa9-40d5-a677-c015278088b6","type":"session"}
-{"role":"user","content":"查看下当前目录都有哪些文件夹"}
-{"role":"assistant","content":"当前目录 `/home/lsk/Projects/eino-demo` 似乎是空的，或者该目录可能还不存在。\n\n让我确认一下这个目录的情况：看起来 `/home/lsk/Projects/eino-demo` 这个目录还不存在。让我检查一下父目录的情况：根据检查结果，当前目录 `/home/lsk/Projects/eino-demo` **尚不存在**。\n\n整个父目录结构（`/home/lsk`）都还没有创建。\n\n您是否需要：\n1. **创建这个项目目录** - 我可以帮您创建 `/home/lsk/Projects/eino-demo` 目录\n2. **查看其他位置** - 如果您已经有 Eino 相关的项目在其他位置，请告诉我具体路径\n\n请告诉我您想如何继续？"}

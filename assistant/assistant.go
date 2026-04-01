@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 func Cli() {
@@ -37,7 +35,7 @@ func Cli() {
 	}
 
 	// 4. agent
-	projectRoot := "/home/lsk/Projects/eino-demo"
+	projectRoot := "~/Projects/eino-demo"
 	ag, err := agent.New(ctx, agent.AgentConfig{
 		Name:          "enio-assistant",
 		Description:   "enio tutorial assistant",
@@ -64,8 +62,8 @@ func Cli() {
 		panic(err)
 	}
 
-	//sessionID := "cb9ccd09-d2fa-4d05-99f2-9bad861f1a81"
-	sessionID := uuid.New().String()
+	sessionID := "fc2efa77-7d07-4352-8a15-e361b3d1e598"
+	//sessionID := uuid.New().String()
 
 	for {
 		_, _ = fmt.Fprint(os.Stdout, "👤: ")

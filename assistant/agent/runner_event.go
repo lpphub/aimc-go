@@ -48,7 +48,7 @@ func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) (*ad
 
 		ec.Sink.Output(sink.Event{
 			Type:    "tool_result",
-			Content: fmt.Sprintf("✅ tool result [%s]: %s\n", mv.ToolName, e.truncate(result.Content, 200))},
+			Content: fmt.Sprintf("✅ [tool result] -> %s: %s\n", mv.ToolName, e.truncate(result.Content, 200))},
 		)
 		return nil, nil
 	}
@@ -121,7 +121,7 @@ func (e *EventHandler) handleStreaming(ec *EventContext, mv *adk.MessageVariant)
 	for _, tc := range accumulatedToolCalls {
 		ec.Sink.Output(sink.Event{
 			Type:    "tool_call",
-			Content: fmt.Sprintf("🔧 tool call [%s]: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
+			Content: fmt.Sprintf("🔧 [tool call] -> %s: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
 		})
 	}
 
@@ -141,7 +141,7 @@ func (e *EventHandler) handleNonStreaming(ec *EventContext, mv *adk.MessageVaria
 	for _, tc := range mv.Message.ToolCalls {
 		ec.Sink.Output(sink.Event{
 			Type:    "tool_call",
-			Content: fmt.Sprintf("\n🔧 tool call [%s]: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
+			Content: fmt.Sprintf("\n🔧 [tool call] -> %s: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
 		})
 	}
 
