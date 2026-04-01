@@ -26,14 +26,17 @@ func New(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
 	if cfg.Model == nil {
 		return nil, fmt.Errorf("model is required")
 	}
+
+	if cfg.MaxIterations == 0 {
+		cfg.MaxIterations = 50
+	}
+
 	if len(cfg.Tools) == 0 {
 		return nil, fmt.Errorf("tools is required, use agent.PresetTools(cm) for built-in tools")
 	}
+
 	if len(cfg.Middlewares) == 0 {
 		return nil, fmt.Errorf("middlewares is required, use agent.PresetMiddlewares(ctx, cm, middleware.Config{}) for built-in middlewares")
-	}
-	if cfg.MaxIterations == 0 {
-		cfg.MaxIterations = 50
 	}
 
 	ag, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{

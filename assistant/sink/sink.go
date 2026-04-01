@@ -5,7 +5,7 @@ import (
 )
 
 type Event struct {
-	Type    string // assistant | tool_call | tool_result | log
+	Type    string // assistant | tool_call | tool_result | message
 	Content string
 }
 

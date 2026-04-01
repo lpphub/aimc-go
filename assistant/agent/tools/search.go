@@ -27,37 +27,38 @@ type SearchResult struct {
 	Summary string `json:"summary"`
 }
 
-func search(ctx context.Context, input *SearchInput) (*SearchOutput, error) {
-	// 模拟搜索结果
-	if input.Limit <= 0 {
-		input.Limit = 5
-	}
-
-	// 这里是模拟实现，实际应用中应调用真实的搜索 API
-	results := []SearchResult{
-		{
-			Title:   fmt.Sprintf("关于 %s 的详细信息", input.Query),
-			URL:     "https://example.com/result1",
-			Summary: fmt.Sprintf("这是关于 %s 的详细信息和解释...", input.Query),
-		},
-		{
-			Title:   fmt.Sprintf("%s - 维基百科", input.Query),
-			URL:     "https://wikipedia.org/example",
-			Summary: fmt.Sprintf("%s 的定义、历史和相关背景...", input.Query),
-		},
-	}
-
-	if len(results) > input.Limit {
-		results = results[:input.Limit]
-	}
-
-	return &SearchOutput{
-		Query:   input.Query,
-		Results: results,
-	}, nil
-}
-
 // NewSearchTool 创建搜索工具
 func NewSearchTool() (tool.BaseTool, error) {
-	return utils.InferTool("web_search_mock", "mock搜索互联网获取信息", search)
+	return utils.InferTool(
+		"web_search_mock",
+		"mock搜索互联网获取信息",
+		func(ctx context.Context, input *SearchInput) (*SearchOutput, error) {
+			// 模拟搜索结果
+			if input.Limit <= 0 {
+				input.Limit = 5
+			}
+
+			// 这里是模拟实现，实际应用中应调用真实的搜索 API
+			results := []SearchResult{
+				{
+					Title:   fmt.Sprintf("关于 %s 的详细信息", input.Query),
+					URL:     "https://example.com/result1",
+					Summary: fmt.Sprintf("这是关于 %s 的详细信息和解释...", input.Query),
+				},
+				{
+					Title:   fmt.Sprintf("%s - 维基百科", input.Query),
+					URL:     "https://wikipedia.org/example",
+					Summary: fmt.Sprintf("%s 的定义、历史和相关背景...", input.Query),
+				},
+			}
+
+			if len(results) > input.Limit {
+				results = results[:input.Limit]
+			}
+
+			return &SearchOutput{
+				Query:   input.Query,
+				Results: results,
+			}, nil
+		})
 }

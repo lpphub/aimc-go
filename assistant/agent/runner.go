@@ -99,6 +99,7 @@ func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator
 		Sink:      r.sink,
 	}
 
+	ec.Sink.Output(sink.Event{Type: "message", Content: "🤖: "})
 	for {
 		event, ok := iter.Next()
 		if !ok {
@@ -107,7 +108,7 @@ func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator
 
 		interruptInfo, err := r.handler.HandleEvent(ec, event)
 		if err != nil {
-			ec.Sink.Output(sink.Event{Type: "log", Content: event.Err.Error()})
+			ec.Sink.Output(sink.Event{Type: "message", Content: event.Err.Error()})
 			return "", nil, err
 		}
 		if interruptInfo != nil {

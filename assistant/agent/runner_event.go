@@ -41,11 +41,14 @@ func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) (*ad
 
 	// tool result
 	if mv.Role == schema.Tool {
-		result := e.drainToolResult(mv)
+		result, err := mv.GetMessage()
+		if err != nil {
+			return nil, fmt.Errorf("get tool_result error: %w", err)
+		}
 
 		ec.Sink.Output(sink.Event{
 			Type:    "tool_result",
-			Content: fmt.Sprintf("✅ tool result [%s]: %s\n", mv.ToolName, e.truncate(result, 200))},
+			Content: fmt.Sprintf("✅ tool result [%s]: %s\n", mv.ToolName, e.truncate(result.Content, 200))},
 		)
 		return nil, nil
 	}
@@ -64,20 +67,20 @@ func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) (*ad
 
 func (e *EventHandler) handleAction(ec *EventContext, action *adk.AgentAction) *adk.InterruptInfo {
 	if action.Interrupted != nil {
-		ec.Sink.Output(sink.Event{Type: "log", Content: "⏸️ interrupted \n"})
+		ec.Sink.Output(sink.Event{Type: "message", Content: "⏸️ interrupted \n"})
 		return action.Interrupted
 	}
 
 	if action.TransferToAgent != nil {
 		ec.Sink.Output(sink.Event{
-			Type:    "log",
+			Type:    "message",
 			Content: fmt.Sprintf("➡️ transfer to %s\n", action.TransferToAgent.DestAgentName),
 		})
 		return nil
 	}
 
 	if action.Exit {
-		ec.Sink.Output(sink.Event{Type: "log", Content: "🏁 exit\n"})
+		ec.Sink.Output(sink.Event{Type: "message", Content: "🏁 exit\n"})
 	}
 
 	return nil
@@ -111,16 +114,16 @@ func (e *EventHandler) handleStreaming(ec *EventContext, mv *adk.MessageVariant)
 		}
 	}
 
+	// 换行
+	ec.Sink.Output(sink.Event{Type: "message", Content: "\n"})
+
 	// tool call（统一输出）
 	for _, tc := range accumulatedToolCalls {
 		ec.Sink.Output(sink.Event{
 			Type:    "tool_call",
-			Content: fmt.Sprintf("\n🔧 tool call [%s]: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
+			Content: fmt.Sprintf("🔧 tool call [%s]: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
 		})
 	}
-
-	// 换行
-	ec.Sink.Output(sink.Event{Type: "message", Content: "\n"})
 
 	return nil
 }
@@ -138,34 +141,11 @@ func (e *EventHandler) handleNonStreaming(ec *EventContext, mv *adk.MessageVaria
 	for _, tc := range mv.Message.ToolCalls {
 		ec.Sink.Output(sink.Event{
 			Type:    "tool_call",
-			Content: fmt.Sprintf("🔧 tool call [%s]: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
+			Content: fmt.Sprintf("\n🔧 tool call [%s]: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
 		})
 	}
 
 	return nil
-}
-
-func (e *EventHandler) drainToolResult(mv *adk.MessageVariant) string {
-	if mv.IsStreaming && mv.MessageStream != nil {
-		var sb strings.Builder
-		for {
-			chunk, err := mv.MessageStream.Recv()
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				break
-			}
-			if chunk != nil && chunk.Content != "" {
-				sb.WriteString(chunk.Content)
-			}
-		}
-		return sb.String()
-	}
-	if mv.Message != nil {
-		return mv.Message.Content
-	}
-	return ""
 }
 
 func (e *EventHandler) truncate(s string, maxLen int) string {

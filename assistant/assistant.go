@@ -37,7 +37,7 @@ func Cli() {
 	}
 
 	// 4. agent
-	projectRoot := "/home/lsk/projects/eino-demo"
+	projectRoot := "/home/lsk/Projects/eino-demo"
 	ag, err := agent.New(ctx, agent.AgentConfig{
 		Name:          "enio-assistant",
 		Description:   "enio tutorial assistant",
@@ -68,7 +68,7 @@ func Cli() {
 	sessionID := uuid.New().String()
 
 	for {
-		_, _ = fmt.Fprint(os.Stdout, "you> ")
+		_, _ = fmt.Fprint(os.Stdout, "👤: ")
 		if !scanner.Scan() {
 			break
 		}
