@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"aimc-go/assistant/llm"
-	"aimc-go/assistant/middleware"
-	"aimc-go/assistant/tools"
+	"aimc-go/assistant/agent/llm"
+	"aimc-go/assistant/agent/middleware"
+	"aimc-go/assistant/agent/tools"
 	"context"
 	"fmt"
 

@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"aimc-go/assistant/agent/llm"
+	"context"
 	"fmt"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -30,6 +32,14 @@ func (r *Registry) GetAll() []tool.BaseTool {
 // InitTools 初始化所有内置工具
 func InitTools() ([]tool.BaseTool, error) {
 	registry := NewRegistry()
+
+	ctx := context.Background()
+	cm, _ := llm.NewChatModel(ctx)
+	ragTool, err := BuildRAGTool(ctx, cm)
+	if err != nil {
+		return nil, fmt.Errorf("build rag tool: %w", err)
+	}
+	registry.Register(ragTool)
 
 	//// 注册天气工具
 	//weatherTool, err := NewWeatherTool()

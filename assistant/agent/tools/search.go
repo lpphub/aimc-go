@@ -10,7 +10,7 @@ import (
 
 // SearchInput 搜索工具输入
 type SearchInput struct {
-	Query string `json:"query" jsonschema_description:"搜索查询内容"`
+	Query string `json:"query" jsonschema_description:"搜索查询mock内容"`
 	Limit int    `json:"limit" jsonschema_description:"返回结果数量限制，默认为5"`
 }
 

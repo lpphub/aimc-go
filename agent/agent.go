@@ -147,7 +147,7 @@ Always use absolute paths when calling filesystem tools.`, projectRoot, projectR
 	}
 
 	// middlewares
-	handlers := []adk.ChatModelAgentMiddleware{skillsMiddleware, &approvalMiddleware{}, &safeToolMiddleware{}}
+	handlers := []adk.ChatModelAgentMiddleware{skillsMiddleware, &safeToolMiddleware{}}
 
 	agent, err := deep.New(ctx, &deep.Config{
 		Name:           "Ch04ToolAgent",

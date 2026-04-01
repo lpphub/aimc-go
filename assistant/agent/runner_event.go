@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"aimc-go/assistant/sink"
 	"context"
 	"errors"
 	"fmt"
@@ -13,119 +14,76 @@ import (
 
 type EventContext struct {
 	Ctx       context.Context
-	Collector *strings.Builder // for assistant
-	Writer    *MsgWriter       // assistant output
+	Collector *strings.Builder // 收集assistant, 后续可扩展兼容工具调用
+	Sink      sink.Sink        // 输出sink: std，sse
 }
 
-type EventHandler interface {
-	Handle(ctx *EventContext, event *adk.AgentEvent) (bool, error)
+type EventHandler struct {
 }
 
-type EventPipeline struct {
-	handlers []EventHandler
-}
-
-func NewEventPipeline(handlers ...EventHandler) *EventPipeline {
-	return &EventPipeline{
-		handlers: handlers,
-	}
-}
-
-func (p *EventPipeline) Execute(ctx *EventContext, event *adk.AgentEvent) error {
-	for _, h := range p.handlers {
-		handled, err := h.Handle(ctx, event)
-		if err != nil {
-			return err
-		}
-		if handled {
-			return nil
-		}
-	}
-	return nil
-}
-
-type ErrorHandler struct{}
-
-func (h *ErrorHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool, error) {
+func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) error {
+	// 1. error
 	if event.Err != nil {
-		ctx.Writer.Output("❌ %v\n", event.Err)
-		return true, event.Err
-	}
-	return false, nil
-}
-
-type ActionHandler struct{}
-
-func (h *ActionHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool, error) {
-	if event.Action == nil {
-		return false, nil
+		ec.Sink.Output(sink.Event{Type: "log", Content: event.Err.Error()})
+		return event.Err
 	}
 
-	if event.Action.Interrupted != nil {
-		ctx.Writer.Output("%s \n", "⏸️ interrupted")
+	// 2. action
+	if event.Action != nil {
+		e.handleAction(ec, event.Action)
+		return nil
 	}
 
-	if event.Action.TransferToAgent != nil {
-		ctx.Writer.Output("➡️ transfer to %s\n", event.Action.TransferToAgent.DestAgentName)
-	}
-
-	if event.Action.Exit {
-		ctx.Writer.Output("%s \n", "🏁 exit")
-	}
-
-	return true, nil
-}
-
-type ToolHandler struct{}
-
-func (h *ToolHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool, error) {
+	// 3. message
 	if event.Output == nil || event.Output.MessageOutput == nil {
-		return false, nil
+		return nil
 	}
 
 	mv := event.Output.MessageOutput
 
-	if mv.Role != schema.Tool {
-		return false, nil
+	// tool result
+	if mv.Role == schema.Tool {
+		result := e.drainToolResult(mv)
+
+		ec.Sink.Output(sink.Event{
+			Type:    "tool_result",
+			Content: fmt.Sprintf("✅ tool result [%s]: %s\n", mv.ToolName, e.truncate(result, 200))},
+		)
+		return nil
 	}
 
-	result := drainToolResult(mv)
-
-	ctx.Writer.Output("🔧 tool result [%s]: %s\n", mv.ToolName, truncate(result, 200))
-
-	return true, nil
-}
-
-type MessageHandler struct{}
-
-func (h *MessageHandler) Handle(ctx *EventContext, event *adk.AgentEvent) (bool, error) {
-	if event.Output == nil || event.Output.MessageOutput == nil {
-		return false, nil
-	}
-
-	mv := event.Output.MessageOutput
-
+	// 只处理 assistant
 	if mv.Role != schema.Assistant && mv.Role != "" {
-		return false, nil
+		return nil
 	}
 
-	var err error
-
-	switch {
-	case mv.IsStreaming:
-		err = h.handleStreaming(ctx, mv)
-	default:
-		err = h.handleNonStreaming(ctx, mv)
+	if mv.IsStreaming {
+		return e.handleStreaming(ec, mv)
 	}
 
-	if err != nil {
-		return true, err
-	}
-
-	return true, nil
+	return e.handleNonStreaming(ec, mv)
 }
 
-func (h *MessageHandler) handleStreaming(ec *EventContext, mv *adk.MessageVariant) error {
+func (e *EventHandler) handleAction(ec *EventContext, action *adk.AgentAction) {
+	if action.Interrupted != nil {
+		ec.Sink.Output(sink.Event{Type: "log", Content: "⏸️ interrupted \n"})
+		return
+	}
+
+	if action.TransferToAgent != nil {
+		ec.Sink.Output(sink.Event{
+			Type:    "log",
+			Content: fmt.Sprintf("➡️ transfer to %s\n", action.TransferToAgent.DestAgentName),
+		})
+		return
+	}
+
+	if action.Exit {
+		ec.Sink.Output(sink.Event{Type: "log", Content: "🏁 exit\n"})
+	}
+}
+
+func (e *EventHandler) handleStreaming(ec *EventContext, mv *adk.MessageVariant) error {
 	mv.MessageStream.SetAutomaticClose()
 
 	var accumulatedToolCalls []schema.ToolCall
@@ -143,8 +101,9 @@ func (h *MessageHandler) handleStreaming(ec *EventContext, mv *adk.MessageVarian
 		}
 
 		if frame.Content != "" {
+			// 收集 assistant 消息
 			ec.Collector.WriteString(frame.Content)
-			ec.Writer.Output("%s", frame.Content)
+			ec.Sink.Output(sink.Event{Type: "assistant", Content: frame.Content})
 		}
 
 		if len(frame.ToolCalls) > 0 {
@@ -152,39 +111,45 @@ func (h *MessageHandler) handleStreaming(ec *EventContext, mv *adk.MessageVarian
 		}
 	}
 
-	if len(accumulatedToolCalls) > 0 {
-		for _, tc := range accumulatedToolCalls {
-			ec.Writer.Output("🔧 tool call [%s]: %s\n", tc.Function.Name, truncate(tc.Function.Arguments, 200))
-		}
+	// tool call（统一输出）
+	for _, tc := range accumulatedToolCalls {
+		ec.Sink.Output(sink.Event{
+			Type:    "tool_call",
+			Content: fmt.Sprintf("\n🔧 tool call [%s]: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
+		})
 	}
 
-	ec.Writer.Output("\n")
+	// 换行
+	ec.Sink.Output(sink.Event{Type: "message", Content: "\n"})
 
 	return nil
 }
 
-func (h *MessageHandler) handleNonStreaming(ec *EventContext, mv *adk.MessageVariant) error {
+func (e *EventHandler) handleNonStreaming(ec *EventContext, mv *adk.MessageVariant) error {
 	if mv.Message == nil {
 		return nil
 	}
 
 	content := mv.Message.Content
-	ec.Collector.WriteString(content)
 
-	ec.Writer.Output("%s", content)
+	ec.Collector.WriteString(content)
+	ec.Sink.Output(sink.Event{Type: "assistant", Content: content})
 
 	for _, tc := range mv.Message.ToolCalls {
-		ec.Writer.Output("🔧 tool call [%s]: %s\n", tc.Function.Name, truncate(tc.Function.Arguments, 200))
+		ec.Sink.Output(sink.Event{
+			Type:    "tool_call",
+			Content: fmt.Sprintf("🔧 tool call [%s]: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
+		})
 	}
 
 	return nil
 }
 
-func drainToolResult(mo *adk.MessageVariant) string {
-	if mo.IsStreaming && mo.MessageStream != nil {
+func (e *EventHandler) drainToolResult(mv *adk.MessageVariant) string {
+	if mv.IsStreaming && mv.MessageStream != nil {
 		var sb strings.Builder
 		for {
-			chunk, err := mo.MessageStream.Recv()
+			chunk, err := mv.MessageStream.Recv()
 			if errors.Is(err, io.EOF) {
 				break
 			}
@@ -197,21 +162,15 @@ func drainToolResult(mo *adk.MessageVariant) string {
 		}
 		return sb.String()
 	}
-	if mo.Message != nil {
-		return mo.Message.Content
+	if mv.Message != nil {
+		return mv.Message.Content
 	}
 	return ""
 }
 
-func truncate(s string, maxLen int) string {
+func (e *EventHandler) truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
 	return s[:maxLen] + "..."
-}
-
-type MsgWriter struct{}
-
-func (po *MsgWriter) Output(format string, args ...any) {
-	fmt.Printf(format, args...)
 }

@@ -1,62 +1,67 @@
 package agent
 
 import (
+	"aimc-go/assistant/sink"
+	"aimc-go/assistant/store"
 	"context"
 	"strings"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 )
 
 type Runner struct {
-	runner   *adk.Runner
-	pipeline *EventPipeline
-
-	history []*schema.Message
+	inner   *adk.Runner
+	handler *EventHandler
+	store   store.Store
 }
 
 // NewRunner 创建 Runner
 func NewRunner(agent adk.Agent) *Runner {
 	return &Runner{
-		runner: adk.NewRunner(context.Background(), adk.RunnerConfig{
+		inner: adk.NewRunner(context.Background(), adk.RunnerConfig{
 			Agent:           agent,
 			EnableStreaming: true,
 		}),
-		pipeline: NewEventPipeline(
-			&ErrorHandler{},
-			&ActionHandler{},
-			&ToolHandler{},
-			&MessageHandler{},
-		),
-		history: make([]*schema.Message, 0),
+		handler: &EventHandler{},
+		store: &store.JSONLStore{
+			Dir:   "./data/sessions",
+			Cache: make(map[string]*store.Session),
+		},
 	}
 }
 
 // Run 执行查询（便捷方法，用于单个用户消息）
-func (r *Runner) Run(ctx context.Context, query string) (string, error) {
+func (r *Runner) Run(ctx context.Context, sessionID, query string) (string, error) {
+	if sessionID == "" {
+		sessionID = uuid.New().String()
+	}
+
+	session, _ := r.store.GetOrCreate(ctx, sessionID)
+
 	// 添加用户消息
-	r.history = append(r.history, schema.UserMessage(query))
+	_ = r.store.Append(ctx, session.ID, schema.UserMessage(query))
 
-	iter := r.runner.Run(ctx, r.history)
+	history := session.Messages
 
+	iter := r.inner.Run(ctx, history)
 	content, err := r.processEventStream(ctx, iter)
 	if err != nil {
 		return "", err
 	}
 
-	// 添加助手消息
-	r.history = append(r.history, schema.AssistantMessage(content, nil))
+	// 添加助手消息（未记录工具调用）
+	_ = r.store.Append(ctx, session.ID, schema.AssistantMessage(content, nil))
 
 	return content, nil
 }
 
 func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator[*adk.AgentEvent]) (string, error) {
-	var sb strings.Builder
-
 	ec := &EventContext{
 		Ctx:       ctx,
-		Collector: &sb,
-		Writer:    &MsgWriter{},
+		Collector: &strings.Builder{},
+		Sink:      &sink.StdoutSink{},
 	}
 
 	for {
@@ -65,10 +70,11 @@ func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator
 			break
 		}
 
-		if err := r.pipeline.Execute(ec, event); err != nil {
+		err := r.handler.HandleEvent(ec, event)
+		if err != nil {
 			return "", err
 		}
 	}
 
-	return sb.String(), nil
+	return ec.Collector.String(), nil
 }
