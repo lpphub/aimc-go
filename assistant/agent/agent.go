@@ -1,61 +1,79 @@
 package agent
 
 import (
-	"aimc-go/assistant/agent/llm"
 	"aimc-go/assistant/agent/middleware"
 	"aimc-go/assistant/agent/tools"
 	"context"
 	"fmt"
 
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 )
 
-type Config struct {
-	Name          string
-	Description   string
-	Instruction   string
+type AgentConfig struct {
+	// Metadata
+	Name        string
+	Description string
+	Instruction string
+
+	// Dependencies (injected by caller)
+	Model       model.ToolCallingChatModel     // required
+	Tools       []tool.BaseTool                // optional, nil = use defaults
+	Middlewares []adk.ChatModelAgentMiddleware // optional, nil = use defaults
+
+	// Runtime config
 	MaxIterations int
 }
 
-func New(cfg Config) (adk.Agent, error) {
-	ctx := context.Background()
-
-	// llm模型
-	cm, err := llm.NewChatModel(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("new chatModel: %w", err)
+func New(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
+	if cfg.Model == nil {
+		return nil, fmt.Errorf("model is required")
+	}
+	if cfg.MaxIterations == 0 {
+		cfg.MaxIterations = 30
 	}
 
-	// 工具
-	innerTools, err := tools.InitTools()
-	if err != nil {
-		return nil, fmt.Errorf("init tools: %w", err)
+	// If tools not specified, use defaults (requires model)
+	if cfg.Tools == nil {
+		defaultTools, err := tools.InitTools(cfg.Model)
+		if err != nil {
+			return nil, fmt.Errorf("init default tools: %w", err)
+		}
+		cfg.Tools = defaultTools
 	}
 
-	// 中间件
-	middlewares, err := middleware.SetupMiddlewares(ctx, cm)
-	if err != nil {
-		return nil, fmt.Errorf("setup middlewares: %w", err)
+	// If middlewares not specified, use default infra middlewares
+	if cfg.Middlewares == nil {
+		defaultMW, err := middleware.SetupMiddlewares(ctx, cfg.Model, middleware.Config{})
+		if err != nil {
+			return nil, fmt.Errorf("setup default middlewares: %w", err)
+		}
+		cfg.Middlewares = defaultMW
 	}
 
-	// 创建 Agent
-	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
+	var toolsConfig adk.ToolsConfig
+	if len(cfg.Tools) > 0 {
+		toolsConfig = adk.ToolsConfig{
+			ToolsNodeConfig: compose.ToolsNodeConfig{
+				Tools: cfg.Tools,
+			},
+		}
+	}
+
+	ag, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:          cfg.Name,
 		Description:   cfg.Description,
 		Instruction:   cfg.Instruction,
 		MaxIterations: cfg.MaxIterations,
-		Model:         cm,
-		ToolsConfig: adk.ToolsConfig{
-			ToolsNodeConfig: compose.ToolsNodeConfig{
-				Tools: innerTools,
-			},
-		},
-		Handlers: middlewares,
+		Model:         cfg.Model,
+		ToolsConfig:   toolsConfig,
+		Handlers:      cfg.Middlewares,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
 	}
 
-	return agent, nil
+	return ag, nil
 }
