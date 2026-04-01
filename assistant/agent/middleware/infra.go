@@ -13,29 +13,23 @@ import (
 	"github.com/cloudwego/eino/components/model"
 )
 
-// SetupMiddlewares 设置中间件（注入基础设施能力）
-//
-//	Handlers: []adk.ChatModelAgentMiddleware{
-//	       patchToolCallsMW,    // ← 必须放在第一个！
-//	       summarizationMW,     // 2. 压缩上下文
-//	       reductionMW,         // 3. 处理大型工具结果
-//	       filesystemMW,        // 4. 添加文件工具
-//	       skillMW,             // 5. 添加技能发现
-//	       planTaskMW,          // 6. 添加任务管理
-//	   },
-func SetupMiddlewares(ctx context.Context, chatModel model.BaseChatModel) ([]adk.ChatModelAgentMiddleware, error) {
-	middlewares, err := setupInfraMiddleware(ctx, chatModel)
+// Config middleware configuration
+type Config struct {
+	SkillDir string // skill files directory, empty means no skill middleware
+}
+
+func SetupMiddlewares(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {
+	middlewares, err := setupInfraMiddleware(ctx, chatModel, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// 自定义中间件
 	middlewares = append(middlewares, &safeToolMiddleware{})
 
 	return middlewares, nil
 }
 
-func setupInfraMiddleware(ctx context.Context, chatModel model.BaseChatModel) ([]adk.ChatModelAgentMiddleware, error) {
+func setupInfraMiddleware(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {
 	var middlewares []adk.ChatModelAgentMiddleware
 
 	backend, err := local.NewBackend(ctx, &local.Config{})
@@ -59,13 +53,16 @@ func setupInfraMiddleware(ctx context.Context, chatModel model.BaseChatModel) ([
 		middlewares = append(middlewares, fsMW)
 	}
 
-	if skillMW, err := skills(ctx, backend); err == nil {
-		middlewares = append(middlewares, skillMW)
+	if cfg.SkillDir != "" {
+		if skillMW, err := skills(ctx, backend, cfg.SkillDir); err == nil {
+			middlewares = append(middlewares, skillMW)
+		}
 	}
+
 	return middlewares, nil
 }
 
-// 注入文件操作相关工具
+// fs injects file operation tools
 func fs(ctx context.Context, backend *local.Local) (adk.ChatModelAgentMiddleware, error) {
 	fsMW, err := filesystem.New(ctx, &filesystem.MiddlewareConfig{
 		Backend:        backend,
@@ -77,10 +74,10 @@ func fs(ctx context.Context, backend *local.Local) (adk.ChatModelAgentMiddleware
 	return fsMW, nil
 }
 
-func skills(ctx context.Context, backend *local.Local) (adk.ChatModelAgentMiddleware, error) {
+func skills(ctx context.Context, backend *local.Local, skillDir string) (adk.ChatModelAgentMiddleware, error) {
 	skillBackend, _ := skill.NewBackendFromFilesystem(ctx, &skill.BackendFromFilesystemConfig{
 		Backend: backend,
-		BaseDir: "/home/lsk/projects/eino-demo/ext/skills",
+		BaseDir: skillDir,
 	})
 	skillMW, err := skill.NewMiddleware(ctx, &skill.Config{
 		Backend: skillBackend,
