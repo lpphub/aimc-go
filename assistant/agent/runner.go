@@ -4,6 +4,7 @@ import (
 	"aimc-go/assistant/sink"
 	"aimc-go/assistant/store"
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cloudwego/eino/adk"
@@ -32,25 +33,40 @@ func WithSink(s sink.Sink) RunnerOption {
 	}
 }
 
-func NewRunner(agent adk.Agent, opts ...RunnerOption) *Runner {
+// DefaultStore returns a JSONL store at the given directory.
+func DefaultStore(dir string) store.Store {
+	return &store.JSONLStore{
+		Dir:   dir,
+		Cache: make(map[string]*store.Session),
+	}
+}
+
+// DefaultSink returns a stdout sink.
+func DefaultSink() sink.Sink {
+	return &sink.StdoutSink{}
+}
+
+func NewRunner(agent adk.Agent, opts ...RunnerOption) (*Runner, error) {
 	r := &Runner{
 		inner: adk.NewRunner(context.Background(), adk.RunnerConfig{
 			Agent:           agent,
 			EnableStreaming: true,
 		}),
 		handler: &EventHandler{},
-		store: &store.JSONLStore{
-			Dir:   "./data/sessions",
-			Cache: make(map[string]*store.Session),
-		},
-		sink: &sink.StdoutSink{},
 	}
 
 	for _, opt := range opts {
 		opt(r)
 	}
 
-	return r
+	if r.store == nil {
+		return nil, fmt.Errorf("store is required, use agent.DefaultStore(dir) for a JSONL store")
+	}
+	if r.sink == nil {
+		return nil, fmt.Errorf("sink is required, use agent.DefaultSink() for stdout")
+	}
+
+	return r, nil
 }
 
 func (r *Runner) Run(ctx context.Context, sessionID, query string) (string, error) {
