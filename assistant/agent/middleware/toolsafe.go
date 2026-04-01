@@ -57,10 +57,3 @@ func (m *safeToolMiddleware) WrapStreamableToolCall(_ context.Context, endpoint 
 		return r, nil
 	}, nil
 }
-
-func singleChunkReader(msg string) *schema.StreamReader[string] {
-	r, w := schema.Pipe[string](1)
-	_ = w.Send(msg, nil)
-	w.Close()
-	return r
-}

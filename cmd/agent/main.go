@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	assistant.Agent()
+	assistant.Cli()
 
 	//agent.DeepAgent()
 }

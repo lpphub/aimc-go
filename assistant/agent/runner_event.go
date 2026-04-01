@@ -21,22 +21,20 @@ type EventContext struct {
 type EventHandler struct {
 }
 
-func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) error {
+func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) (*adk.InterruptInfo, error) {
 	// 1. error
 	if event.Err != nil {
-		ec.Sink.Output(sink.Event{Type: "log", Content: event.Err.Error()})
-		return event.Err
+		return nil, event.Err
 	}
 
 	// 2. action
 	if event.Action != nil {
-		e.handleAction(ec, event.Action)
-		return nil
+		return e.handleAction(ec, event.Action), nil
 	}
 
 	// 3. message
 	if event.Output == nil || event.Output.MessageOutput == nil {
-		return nil
+		return nil, nil
 	}
 
 	mv := event.Output.MessageOutput
@@ -49,25 +47,25 @@ func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) erro
 			Type:    "tool_result",
 			Content: fmt.Sprintf("✅ tool result [%s]: %s\n", mv.ToolName, e.truncate(result, 200))},
 		)
-		return nil
+		return nil, nil
 	}
 
 	// 只处理 assistant
 	if mv.Role != schema.Assistant && mv.Role != "" {
-		return nil
+		return nil, nil
 	}
 
 	if mv.IsStreaming {
-		return e.handleStreaming(ec, mv)
+		return nil, e.handleStreaming(ec, mv)
 	}
 
-	return e.handleNonStreaming(ec, mv)
+	return nil, e.handleNonStreaming(ec, mv)
 }
 
-func (e *EventHandler) handleAction(ec *EventContext, action *adk.AgentAction) {
+func (e *EventHandler) handleAction(ec *EventContext, action *adk.AgentAction) *adk.InterruptInfo {
 	if action.Interrupted != nil {
 		ec.Sink.Output(sink.Event{Type: "log", Content: "⏸️ interrupted \n"})
-		return
+		return action.Interrupted
 	}
 
 	if action.TransferToAgent != nil {
@@ -75,12 +73,14 @@ func (e *EventHandler) handleAction(ec *EventContext, action *adk.AgentAction) {
 			Type:    "log",
 			Content: fmt.Sprintf("➡️ transfer to %s\n", action.TransferToAgent.DestAgentName),
 		})
-		return
+		return nil
 	}
 
 	if action.Exit {
 		ec.Sink.Output(sink.Event{Type: "log", Content: "🏁 exit\n"})
 	}
+
+	return nil
 }
 
 func (e *EventHandler) handleStreaming(ec *EventContext, mv *adk.MessageVariant) error {

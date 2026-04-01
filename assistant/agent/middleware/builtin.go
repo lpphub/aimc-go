@@ -14,22 +14,8 @@ import (
 )
 
 // Config middleware configuration
-type Config struct {
-	SkillDir string // skill files directory, empty means no skill middleware
-}
 
-func SetupMiddlewares(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {
-	middlewares, err := setupInfraMiddleware(ctx, chatModel, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	middlewares = append(middlewares, &safeToolMiddleware{})
-
-	return middlewares, nil
-}
-
-func setupInfraMiddleware(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {
+func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {
 	var middlewares []adk.ChatModelAgentMiddleware
 
 	backend, err := local.NewBackend(ctx, &local.Config{})

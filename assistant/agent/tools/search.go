@@ -10,7 +10,7 @@ import (
 
 // SearchInput 搜索工具输入
 type SearchInput struct {
-	Query string `json:"query" jsonschema_description:"搜索查询mock内容"`
+	Query string `json:"query" jsonschema_description:"搜索查询内容"`
 	Limit int    `json:"limit" jsonschema_description:"返回结果数量限制，默认为5"`
 }
 
@@ -59,5 +59,5 @@ func search(ctx context.Context, input *SearchInput) (*SearchOutput, error) {
 
 // NewSearchTool 创建搜索工具
 func NewSearchTool() (tool.BaseTool, error) {
-	return utils.InferTool("web_search", "搜索互联网获取信息", search)
+	return utils.InferTool("web_search_mock", "mock搜索互联网获取信息", search)
 }

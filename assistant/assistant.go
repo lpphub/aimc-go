@@ -5,6 +5,7 @@ import (
 	"aimc-go/assistant/agent/llm"
 	"aimc-go/assistant/agent/middleware"
 	"aimc-go/assistant/agent/prompts"
+	"aimc-go/assistant/approval"
 	"bufio"
 	"context"
 	"fmt"
@@ -14,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func Agent() {
+func Cli() {
 	ctx := context.Background()
 
 	// 1. model
@@ -24,13 +25,13 @@ func Agent() {
 	}
 
 	// 2. tools — 使用默认工具集
-	agentTools, err := agent.DefaultTools(cm)
+	agentTools, err := agent.PresetTools(cm)
 	if err != nil {
 		panic(err)
 	}
 
 	// 3. middlewares — 使用默认中间件
-	middlewares, err := agent.DefaultMiddlewares(ctx, cm, middleware.Config{})
+	middlewares, err := agent.PresetMiddlewares(ctx, cm, middleware.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -44,24 +45,28 @@ func Agent() {
 		Model:         cm,
 		Tools:         agentTools,
 		Middlewares:   middlewares,
-		MaxIterations: 30,
+		MaxIterations: 50,
 	})
 	if err != nil {
 		panic(err)
 	}
 
+	scanner := bufio.NewScanner(os.Stdin)
+	sink := agent.StdoutSink()
+
 	// 5. runner — 使用默认 store/sink
 	runner, err := agent.NewRunner(ag,
-		agent.WithStore(agent.DefaultStore("./data/sessions")),
-		agent.WithSink(agent.DefaultSink()),
+		agent.WithStore(agent.JSONLStore("./data/sessions")),
+		agent.WithSink(sink),
+		agent.WithApprovalHandler(approval.NewCLIApprovalHandler(scanner, sink)),
 	)
 	if err != nil {
 		panic(err)
 	}
 
+	//sessionID := "cb9ccd09-d2fa-4d05-99f2-9bad861f1a81"
 	sessionID := uuid.New().String()
 
-	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		_, _ = fmt.Fprint(os.Stdout, "you> ")
 		if !scanner.Scan() {
@@ -72,7 +77,7 @@ func Agent() {
 			break
 		}
 
-		_, err = runner.Run(ctx, sessionID, line)
+		err = runner.Run(ctx, sessionID, line)
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
