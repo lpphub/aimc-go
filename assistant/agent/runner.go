@@ -15,11 +15,25 @@ type Runner struct {
 	inner   *adk.Runner
 	handler *EventHandler
 	store   store.Store
+	sink    sink.Sink
 }
 
-// NewRunner 创建 Runner
-func NewRunner(agent adk.Agent) *Runner {
-	return &Runner{
+type RunnerOption func(*Runner)
+
+func WithStore(s store.Store) RunnerOption {
+	return func(r *Runner) {
+		r.store = s
+	}
+}
+
+func WithSink(s sink.Sink) RunnerOption {
+	return func(r *Runner) {
+		r.sink = s
+	}
+}
+
+func NewRunner(agent adk.Agent, opts ...RunnerOption) *Runner {
+	r := &Runner{
 		inner: adk.NewRunner(context.Background(), adk.RunnerConfig{
 			Agent:           agent,
 			EnableStreaming: true,
@@ -29,31 +43,32 @@ func NewRunner(agent adk.Agent) *Runner {
 			Dir:   "./data/sessions",
 			Cache: make(map[string]*store.Session),
 		},
+		sink: &sink.StdoutSink{},
 	}
+
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
 }
 
-// Run 执行查询（便捷方法，用于单个用户消息）
 func (r *Runner) Run(ctx context.Context, sessionID, query string) (string, error) {
 	if sessionID == "" {
 		sessionID = uuid.New().String()
 	}
 
 	session, _ := r.store.GetOrCreate(ctx, sessionID)
-
-	// 添加用户消息
 	_ = r.store.Append(ctx, session.ID, schema.UserMessage(query))
 
 	history := session.Messages
-
 	iter := r.inner.Run(ctx, history)
 	content, err := r.processEventStream(ctx, iter)
 	if err != nil {
 		return "", err
 	}
 
-	// 添加助手消息（未记录工具调用）
 	_ = r.store.Append(ctx, session.ID, schema.AssistantMessage(content, nil))
-
 	return content, nil
 }
 
@@ -61,7 +76,7 @@ func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator
 	ec := &EventContext{
 		Ctx:       ctx,
 		Collector: &strings.Builder{},
-		Sink:      &sink.StdoutSink{},
+		Sink:      r.sink,
 	}
 
 	for {
@@ -69,7 +84,6 @@ func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator
 		if !ok {
 			break
 		}
-
 		err := r.handler.HandleEvent(ec, event)
 		if err != nil {
 			return "", err
