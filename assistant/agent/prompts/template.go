@@ -1,5 +1,7 @@
 package prompts
 
+import "fmt"
+
 const (
 	EinoTutorial = `You are a helpful assistant that helps users learn the Eino framework.
 
@@ -13,3 +15,7 @@ The project root directory is: %s
 
 Always use absolute paths when calling filesystem tools.`
 )
+
+func GetEinoAssistant(root string) string {
+	return fmt.Sprintf(EinoTutorial, root, root, root, root)
+}

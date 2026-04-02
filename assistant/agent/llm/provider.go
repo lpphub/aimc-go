@@ -2,30 +2,22 @@ package llm
 
 import (
 	"context"
+	"os"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
+	"github.com/joho/godotenv"
 )
 
-type Config struct {
-	APIKey  string
-	Model   string
-	BaseURL string
+func init() {
+	_ = godotenv.Load(".env")
 }
 
-func DefaultConfig() Config {
-	return Config{
-		APIKey:  "sk-sp-ac76140d6ae04e939ad6b82d71c2ea31",
-		Model:   "glm-5",
-		BaseURL: "https://coding.dashscope.aliyuncs.com/v1",
-	}
-}
-
-func NewChatModel(ctx context.Context, cfg Config) (model.ToolCallingChatModel, error) {
+func NewChatModel(ctx context.Context) (model.ToolCallingChatModel, error) {
 	return openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		APIKey:  cfg.APIKey,
-		Model:   cfg.Model,
-		BaseURL: cfg.BaseURL,
+		APIKey:  os.Getenv("API_KEY"),
+		Model:   os.Getenv("MODEL"),
+		BaseURL: os.Getenv("API_BASE_URL"),
 		ByAzure: false,
 	})
 }

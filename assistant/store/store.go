@@ -23,8 +23,8 @@ type Session struct {
 type Store interface {
 	//GetOrCreate 获取 session，不存在则创建
 	GetOrCreate(ctx context.Context, sessionID string) (*Session, error)
-	//Append 追加一条 message（核心写入路径）
-	Append(ctx context.Context, sessionID string, msg *schema.Message) error
+	//Append 追加一条或多条 message（支持批量写入）
+	Append(ctx context.Context, sessionID string, msgs ...*schema.Message) error
 }
 
 type JSONLStore struct {
@@ -81,13 +81,12 @@ func (s *JSONLStore) GetOrCreate(_ context.Context, sessionID string) (*Session,
 	return sess, nil
 }
 
-func (s *JSONLStore) Append(ctx context.Context, sessionID string, msg *schema.Message) error {
+// Append 追加一条或多条 message（支持批量写入）
+func (s *JSONLStore) Append(ctx context.Context, sessionID string, messages ...*schema.Message) error {
 	sess, err := s.GetOrCreate(ctx, sessionID)
 	if err != nil {
 		return err
 	}
-
-	sess.Messages = append(sess.Messages, msg)
 
 	f, err := os.OpenFile(filepath.Join(s.Dir, sessionID+".jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -95,12 +94,19 @@ func (s *JSONLStore) Append(ctx context.Context, sessionID string, msg *schema.M
 	}
 	defer f.Close()
 
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("marshal message: %w", err)
+	for _, msg := range messages {
+		sess.Messages = append(sess.Messages, msg)
+
+		data, err := json.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("marshal message: %w", err)
+		}
+		if _, err = f.Write(append(data, '\n')); err != nil {
+			return err
+		}
 	}
-	_, err = f.Write(append(data, '\n'))
-	return err
+
+	return nil
 }
 
 func (s *JSONLStore) loadSession(filePath string) (*Session, error) {

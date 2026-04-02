@@ -24,7 +24,7 @@ type EventContext struct {
 func NewEventContext(ctx context.Context, s sink.Sink) *EventContext {
 	return &EventContext{
 		Ctx:      ctx,
-		messages: make([]*schema.Message, 0, 10), // 预分配，减少扩容
+		messages: make([]*schema.Message, 0, 20), // 预分配，减少扩容
 		Sink:     s,
 	}
 }

@@ -1,5 +1,0 @@
-{"created_at":"2026-04-02T02:14:46.661205661Z","id":"b609af96-f5fd-4e7b-8d29-648d0e521d2f","type":"session"}
-{"role":"user","content":"你是谁"}
-{"role":"assistant","content":"你好！我是一个帮助您学习 **Eino 框架** 的助手。\n\nEino 是一个基于 Go 语言开发的 AI 应用开发框架。我可以帮助你：\n\n- 📖 理解 Eino 框架的核心概念和架构\n- 💻 编写和调试 Eino 应用代码\n- 🔍 分析项目结构和代码示例\n- 🚀 解决开发过程中遇到的问题\n\n让我先看看你当前的项目结构：","tool_calls":[{"index":0,"id":"tool-960c5cf4b4974c15bbcadf2de72d6488","type":"function","function":{"name":"ls","arguments":"{\"path\": \"~/Projects/eino-demo\"}"}}]}
-{"role":"tool","content":"No files found","tool_call_id":"tool-960c5cf4b4974c15bbcadf2de72d6488","tool_name":"ls"}
-{"role":"assistant","content":"看起来你的项目目录 `~/Projects/eino-demo` 目前是空的。\n\n你想从哪里开始呢？我可以帮你：\n\n1. **初始化一个 Eino 项目** - 从零开始创建一个示例项目\n2. **了解 Eino 核心概念** - 介绍 Graph、Chain、Lambda、Passthrough 等组件\n3. **查看特定功能的示例** - 比如使用 ChatModel、构建 RAG 应用等\n\n请告诉我你想做什么！"}

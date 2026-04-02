@@ -63,11 +63,11 @@ func (p *CLIApprovalHandler) GetApproval(_ context.Context, ic *adk.InterruptCtx
 	response := strings.TrimSpace(p.scanner.Text())
 
 	if response == "y" || response == "yes" {
-		p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: "✓ Approved, executing...\n"})
+		p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: "✔️ Approved, executing...\n"})
 		return &ApprovalResult{Approved: true}, nil
 	}
 
-	p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: "✗ Rejected\n"})
+	p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: "✖️ Rejected\n"})
 	return &ApprovalResult{Approved: false}, nil
 }
 

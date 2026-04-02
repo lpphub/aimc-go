@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"aimc-go/assistant/agent/llm"
+	"aimc-go/assistant/agent/middleware"
+	"aimc-go/assistant/agent/prompts"
 	"context"
 	"fmt"
 	"strings"
@@ -36,7 +39,7 @@ func (c *AgentConfig) Validate() error {
 	return nil
 }
 
-func New(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
+func buildAgent(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -67,6 +70,42 @@ func New(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
+	}
+
+	return ag, nil
+}
+
+func New(ctx context.Context) (adk.Agent, error) {
+	// 1. model
+	cm, err := llm.NewChatModel(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("❌ Failed to create model: %v\n", err)
+	}
+
+	// 2. tools — 使用默认工具集
+	agentTools, err := PresetTools(cm)
+	if err != nil {
+		return nil, fmt.Errorf("❌ Failed to initialize tools: %v\n", err)
+	}
+
+	// 3. middlewares — 使用默认中间件
+	middlewares, err := PresetMiddlewares(ctx, cm, middleware.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("❌ Failed to setup middlewares: %v\n", err)
+	}
+
+	// 4. agent
+	ag, err := buildAgent(ctx, AgentConfig{
+		Name:          "enio-assistant",
+		Description:   "enio tutorial assistant",
+		Instruction:   prompts.GetEinoAssistant("/home/lsk/projects/eino-demo"),
+		Model:         cm,
+		Tools:         agentTools,
+		Middlewares:   middlewares,
+		MaxIterations: 50,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("❌ Failed to create agent: %v\n", err)
 	}
 
 	return ag, nil

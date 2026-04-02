@@ -80,9 +80,7 @@ func (r *Runner) Run(ctx context.Context, sessionID, query string) error {
 	}
 
 	// 存储所有收集的消息（assistant messages + tool results）
-	for _, msg := range messages {
-		_ = r.store.Append(ctx, session.ID, msg)
-	}
+	_ = r.store.Append(ctx, session.ID, messages...)
 
 	for interruptInfo != nil {
 		messages, interruptInfo, err = r.handleInterrupt(ctx, sessionID, interruptInfo)
@@ -90,9 +88,7 @@ func (r *Runner) Run(ctx context.Context, sessionID, query string) error {
 			return err
 		}
 		// 存储恢复后的消息
-		for _, msg := range messages {
-			_ = r.store.Append(ctx, session.ID, msg)
-		}
+		_ = r.store.Append(ctx, session.ID, messages...)
 	}
 
 	return nil
