@@ -13,11 +13,11 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// eventHandler 处理 eino AgentEvent 并转换为 Chunk 输出
-type eventHandler struct{}
+// Runtime 处理 eino AgentEvent 并转换为 Chunk 输出
+type Runtime struct{}
 
 // handleAgentEvent 处理单个 agent 事件
-func (e *eventHandler) handleAgentEvent(session *Session, event *adk.AgentEvent) (*adk.InterruptInfo, error) {
+func (r *Runtime) handleAgentEvent(session *Session, event *adk.AgentEvent) (*adk.InterruptInfo, error) {
 	// 1. error
 	if event.Err != nil {
 		session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
@@ -30,7 +30,7 @@ func (e *eventHandler) handleAgentEvent(session *Session, event *adk.AgentEvent)
 
 	// 2. action
 	if event.Action != nil {
-		return e.handleAction(session, event.Action), nil
+		return r.handleAction(session, event.Action), nil
 	}
 
 	// 3. message
@@ -52,7 +52,7 @@ func (e *eventHandler) handleAgentEvent(session *Session, event *adk.AgentEvent)
 
 		session.Emit(sink.Chunk{
 			Type:    sink.TypeToolResult,
-			Content: fmt.Sprintf("✅ [tool result] -> %s: %s\n", mv.ToolName, e.truncate(result.Content, 200)),
+			Content: fmt.Sprintf("✅ [tool result] -> %s: %s\n", mv.ToolName, r.truncate(result.Content, 200)),
 		})
 		return nil, nil
 	}
@@ -63,13 +63,13 @@ func (e *eventHandler) handleAgentEvent(session *Session, event *adk.AgentEvent)
 	}
 
 	if mv.IsStreaming {
-		return nil, e.handleStreaming(session, mv)
+		return nil, r.handleStreaming(session, mv)
 	}
-	return nil, e.handleNonStreaming(session, mv)
+	return nil, r.handleNonStreaming(session, mv)
 }
 
 // handleAction 处理 interrupt/transfer/exit
-func (e *eventHandler) handleAction(session *Session, action *adk.AgentAction) *adk.InterruptInfo {
+func (r *Runtime) handleAction(session *Session, action *adk.AgentAction) *adk.InterruptInfo {
 	if action.Interrupted != nil {
 		session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "⏸️ interrupted \n"})
 		return action.Interrupted
@@ -91,7 +91,7 @@ func (e *eventHandler) handleAction(session *Session, action *adk.AgentAction) *
 }
 
 // handleStreaming 处理流式消息
-func (e *eventHandler) handleStreaming(session *Session, mv *adk.MessageVariant) error {
+func (r *Runtime) handleStreaming(session *Session, mv *adk.MessageVariant) error {
 	mv.MessageStream.SetAutomaticClose()
 
 	var contentBuf strings.Builder
@@ -126,7 +126,7 @@ func (e *eventHandler) handleStreaming(session *Session, mv *adk.MessageVariant)
 	for _, tc := range accumulatedToolCalls {
 		session.Emit(sink.Chunk{
 			Type:    sink.TypeToolCall,
-			Content: fmt.Sprintf("🔧 [tool call] -> %s: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
+			Content: fmt.Sprintf("🔧 [tool call] -> %s: %s\n", tc.Function.Name, r.truncate(tc.Function.Arguments, 200)),
 		})
 	}
 
@@ -141,7 +141,7 @@ func (e *eventHandler) handleStreaming(session *Session, mv *adk.MessageVariant)
 }
 
 // handleNonStreaming 处理非流式消息
-func (e *eventHandler) handleNonStreaming(session *Session, mv *adk.MessageVariant) error {
+func (r *Runtime) handleNonStreaming(session *Session, mv *adk.MessageVariant) error {
 	if mv.Message == nil {
 		return nil
 	}
@@ -152,7 +152,7 @@ func (e *eventHandler) handleNonStreaming(session *Session, mv *adk.MessageVaria
 	for _, tc := range mv.Message.ToolCalls {
 		session.Emit(sink.Chunk{
 			Type:    sink.TypeToolCall,
-			Content: fmt.Sprintf("\n🔧 [tool call] -> %s: %s\n", tc.Function.Name, e.truncate(tc.Function.Arguments, 200)),
+			Content: fmt.Sprintf("\n🔧 [tool call] -> %s: %s\n", tc.Function.Name, r.truncate(tc.Function.Arguments, 200)),
 		})
 	}
 
@@ -163,7 +163,7 @@ func (e *eventHandler) handleNonStreaming(session *Session, mv *adk.MessageVaria
 }
 
 // truncate 截断字符串，按 rune 截断避免破坏多字节字符
-func (e *eventHandler) truncate(s string, maxLen int) string {
+func (r *Runtime) truncate(s string, maxLen int) string {
 	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
@@ -176,9 +176,7 @@ func (e *eventHandler) truncate(s string, maxLen int) string {
 }
 
 // processEvents 迭代处理事件流
-func processEvents(ctx context.Context, session *Session, iter *adk.AsyncIterator[*adk.AgentEvent]) (*adk.InterruptInfo, error) {
-	handler := &eventHandler{}
-
+func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk.AsyncIterator[*adk.AgentEvent]) (*adk.InterruptInfo, error) {
 	session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "🤖: "})
 
 	for {
@@ -187,7 +185,7 @@ func processEvents(ctx context.Context, session *Session, iter *adk.AsyncIterato
 			break
 		}
 
-		interruptInfo, err := handler.handleAgentEvent(session, event)
+		interruptInfo, err := r.handleAgentEvent(session, event)
 		if err != nil {
 			return nil, err
 		}
