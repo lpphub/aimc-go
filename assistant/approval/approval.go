@@ -55,7 +55,7 @@ func (p *CLIApprovalHandler) GetApproval(_ context.Context, ic *adk.InterruptCtx
 		return nil, fmt.Errorf("unexpected interrupt info type: %T", ic.Info)
 	}
 
-	p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: info.String()})
+	p.sink.Emit(sink.Chunk{Type: sink.TypeMessage, Content: info.String()})
 
 	if p.scanner == nil || !p.scanner.Scan() {
 		return nil, fmt.Errorf("failed to read approval input")
@@ -63,11 +63,11 @@ func (p *CLIApprovalHandler) GetApproval(_ context.Context, ic *adk.InterruptCtx
 	response := strings.TrimSpace(p.scanner.Text())
 
 	if response == "y" || response == "yes" {
-		p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: "✔️ Approved, executing...\n"})
+		p.sink.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "✔️ Approved, executing...\n"})
 		return &ApprovalResult{Approved: true}, nil
 	}
 
-	p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: "✖️ Rejected\n"})
+	p.sink.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "✖️ Rejected\n"})
 	return &ApprovalResult{Approved: false}, nil
 }
 
@@ -102,7 +102,7 @@ func (p *SSEApprovalHandler) GetApproval(ctx context.Context, ic *adk.InterruptC
 	p.pending[ic.ID] = ch
 	p.mu.Unlock()
 
-	p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: info.String()})
+	p.sink.Emit(sink.Chunk{Type: sink.TypeMessage, Content: info.String()})
 
 	select {
 	case result := <-ch:
