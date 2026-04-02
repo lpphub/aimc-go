@@ -3,7 +3,6 @@ package assistant
 import (
 	"aimc-go/assistant/agent"
 	"aimc-go/assistant/approval"
-	"aimc-go/assistant/command"
 	"bufio"
 	"context"
 	"fmt"
@@ -11,7 +10,7 @@ import (
 	"strings"
 )
 
-func Cli() {
+func Run() {
 	ctx := context.Background()
 
 	assistantAgent, err := agent.New(ctx)
@@ -38,13 +37,6 @@ func Cli() {
 
 	sessionID := "e69dfa6e-820a-4fcf-8a23-40107b0a324f"
 
-	deps := &command.Dependencies{
-		Store:     store,
-		Runner:    runner,
-		SessionID: &sessionID,
-		Scanner:   scanner,
-	}
-
 	for {
 		_, _ = fmt.Fprint(os.Stdout, "👤: ")
 		if !scanner.Scan() {
@@ -52,16 +44,7 @@ func Cli() {
 		}
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
-			continue
-		}
-
-		// 检查是否是命令
-		name, args := command.Parse(line)
-		if name != "" {
-			if err := command.Execute(ctx, deps, name, args); err != nil {
-				_, _ = fmt.Fprintln(os.Stderr, err)
-			}
-			continue
+			break
 		}
 
 		// 发送给 agent
