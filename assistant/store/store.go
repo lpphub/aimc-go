@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -154,4 +155,52 @@ func (s *JSONLStore) loadSession(filePath string) (*Session, error) {
 	}
 
 	return sess, nil
+}
+
+// ListSessions 返回所有会话（按创建时间倒序）
+func (s *JSONLStore) ListSessions() ([]*Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	files, err := os.ReadDir(s.Dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var sessions []*Session
+	for _, f := range files {
+		if !strings.HasSuffix(f.Name(), ".jsonl") {
+			continue
+		}
+		sessionID := strings.TrimSuffix(f.Name(), ".jsonl")
+		filePath := filepath.Join(s.Dir, f.Name())
+
+		sess, err := s.loadSession(filePath)
+		if err != nil {
+			continue
+		}
+		sessions = append(sessions, sess)
+		s.Cache[sessionID] = sess
+	}
+
+	// 按创建时间倒序排序
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].CreatedAt.After(sessions[j].CreatedAt)
+	})
+
+	return sessions, nil
+}
+
+// GetRecent 返回最近 N 个会话（按创建时间倒序）
+func (s *JSONLStore) GetRecent(n int) ([]*Session, error) {
+	sessions, err := s.ListSessions()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(sessions) < n {
+		return sessions, nil
+	}
+
+	return sessions[:n], nil
 }
