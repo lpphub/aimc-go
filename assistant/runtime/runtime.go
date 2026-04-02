@@ -77,9 +77,15 @@ func (r *Runtime) Run(ctx context.Context, session *Session, query string) error
 	iter := innerRunner.Run(ctx, sessHistory.Messages, adk.WithCheckPointID(session.ID))
 
 	// 3. 处理事件流
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	messages, interruptInfo, err := r.processEvents(ctx, session, iter)
 	if err != nil {
-		return err
+		return fmt.Errorf("process events: %w", err)
 	}
 
 	// 4. 存储输出消息
@@ -92,6 +98,12 @@ func (r *Runtime) Run(ctx context.Context, session *Session, query string) error
 
 	// 5. 处理中断（审批）
 	if interruptInfo != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		return r.handleInterrupt(ctx, session, interruptInfo)
 	}
 
