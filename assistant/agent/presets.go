@@ -32,5 +32,5 @@ func JSONLStore(dir string) store.Store {
 
 // StdoutSink returns a stdout sink.
 func StdoutSink() sink.Sink {
-	return &sink.StdoutSink{}
+	return sink.NewStdoutSink()
 }

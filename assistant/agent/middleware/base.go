@@ -8,8 +8,10 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+// Config middleware 配置
 type Config struct {
-	SkillDir string // skill files directory, empty means no skill middleware
+	// SkillDir skill 文件目录，为空则不启用 skill 中间件
+	SkillDir string
 }
 
 func SetupMiddlewares(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {

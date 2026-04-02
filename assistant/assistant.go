@@ -19,23 +19,26 @@ func Cli() {
 	// 1. model
 	cm, err := llm.NewChatModel(ctx, llm.DefaultConfig())
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "❌ Failed to create model: %v\n", err)
+		os.Exit(1)
 	}
 
 	// 2. tools — 使用默认工具集
 	agentTools, err := agent.PresetTools(cm)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "❌ Failed to initialize tools: %v\n", err)
+		os.Exit(1)
 	}
 
 	// 3. middlewares — 使用默认中间件
 	middlewares, err := agent.PresetMiddlewares(ctx, cm, middleware.Config{})
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "❌ Failed to setup middlewares: %v\n", err)
+		os.Exit(1)
 	}
 
 	// 4. agent
-	projectRoot := "~/Projects/eino-demo"
+	projectRoot := "/home/lsk/projects/eino-demo"
 	ag, err := agent.New(ctx, agent.AgentConfig{
 		Name:          "enio-assistant",
 		Description:   "enio tutorial assistant",
@@ -46,7 +49,8 @@ func Cli() {
 		MaxIterations: 50,
 	})
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "❌ Failed to create agent: %v\n", err)
+		os.Exit(1)
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -59,11 +63,11 @@ func Cli() {
 		agent.WithApprovalHandler(approval.NewCLIApprovalHandler(scanner, sink)),
 	)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "❌ Failed to create runner: %v\n", err)
+		os.Exit(1)
 	}
 
-	sessionID := "fc2efa77-7d07-4352-8a15-e361b3d1e598"
-	//sessionID := uuid.New().String()
+	sessionID := "e69dfa6e-820a-4fcf-8a23-40107b0a324f"
 
 	for {
 		_, _ = fmt.Fprint(os.Stdout, "👤: ")

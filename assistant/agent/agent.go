@@ -22,21 +22,27 @@ type AgentConfig struct {
 	Middlewares []adk.ChatModelAgentMiddleware // required
 }
 
+// Validate 验证 AgentConfig 配置
+func (c *AgentConfig) Validate() error {
+	if c.Model == nil {
+		return fmt.Errorf("model is required")
+	}
+	if len(c.Tools) == 0 {
+		return fmt.Errorf("tools is required, use agent.PresetTools(cm) for built-in tools")
+	}
+	if len(c.Middlewares) == 0 {
+		return fmt.Errorf("middlewares is required, use agent.PresetMiddlewares(ctx, cm, middleware.Config{}) for built-in middlewares")
+	}
+	return nil
+}
+
 func New(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
-	if cfg.Model == nil {
-		return nil, fmt.Errorf("model is required")
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 
 	if cfg.MaxIterations == 0 {
 		cfg.MaxIterations = 50
-	}
-
-	if len(cfg.Tools) == 0 {
-		return nil, fmt.Errorf("tools is required, use agent.PresetTools(cm) for built-in tools")
-	}
-
-	if len(cfg.Middlewares) == 0 {
-		return nil, fmt.Errorf("middlewares is required, use agent.PresetMiddlewares(ctx, cm, middleware.Config{}) for built-in middlewares")
 	}
 
 	ag, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{

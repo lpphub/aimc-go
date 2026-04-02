@@ -82,9 +82,6 @@ func (s *JSONLStore) GetOrCreate(_ context.Context, sessionID string) (*Session,
 }
 
 func (s *JSONLStore) Append(ctx context.Context, sessionID string, msg *schema.Message) error {
-	//s.mu.Lock()
-	//defer s.mu.Unlock()
-
 	sess, err := s.GetOrCreate(ctx, sessionID)
 	if err != nil {
 		return err
@@ -98,7 +95,10 @@ func (s *JSONLStore) Append(ctx context.Context, sessionID string, msg *schema.M
 	}
 	defer f.Close()
 
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshal message: %w", err)
+	}
 	_, err = f.Write(append(data, '\n'))
 	return err
 }

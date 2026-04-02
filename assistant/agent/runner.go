@@ -6,7 +6,6 @@ import (
 	"aimc-go/assistant/store"
 	"context"
 	"fmt"
-	"strings"
 
 	adkstore "github.com/cloudwego/eino-examples/adk/common/store"
 	"github.com/cloudwego/eino/adk"
@@ -47,7 +46,7 @@ func NewRunner(agent adk.Agent, opts ...RunnerOption) (*Runner, error) {
 		inner: adk.NewRunner(context.Background(), adk.RunnerConfig{
 			Agent:           agent,
 			EnableStreaming: true,
-			CheckPointStore: adkstore.NewInMemoryStore(), // 检查点，可替换redis实现
+			CheckPointStore: adkstore.NewInMemoryStore(),
 		}),
 		handler: &EventHandler{},
 	}
@@ -60,7 +59,7 @@ func NewRunner(agent adk.Agent, opts ...RunnerOption) (*Runner, error) {
 		return nil, fmt.Errorf("store is required, use agent.JSONLStore(dir) for a JSONL store")
 	}
 	if r.sink == nil {
-		return nil, fmt.Errorf("sink is required, use agent.StdoutSink() for stdout")
+		return nil, fmt.Errorf("sink is required, use sink.NewStdoutSink() for stdout")
 	}
 
 	return r, nil
@@ -75,31 +74,34 @@ func (r *Runner) Run(ctx context.Context, sessionID, query string) error {
 	_ = r.store.Append(ctx, session.ID, schema.UserMessage(query))
 
 	iter := r.inner.Run(ctx, session.Messages, adk.WithCheckPointID(sessionID))
-	content, interruptInfo, err := r.processEventStream(ctx, iter)
+	messages, interruptInfo, err := r.streamEvent(ctx, iter)
 	if err != nil {
 		return err
 	}
 
+	// 存储所有收集的消息（assistant messages + tool results）
+	for _, msg := range messages {
+		_ = r.store.Append(ctx, session.ID, msg)
+	}
+
 	for interruptInfo != nil {
-		content, interruptInfo, err = r.handleInterrupt(ctx, sessionID, interruptInfo)
+		messages, interruptInfo, err = r.handleInterrupt(ctx, sessionID, interruptInfo)
 		if err != nil {
 			return err
 		}
+		// 存储恢复后的消息
+		for _, msg := range messages {
+			_ = r.store.Append(ctx, session.ID, msg)
+		}
 	}
-
-	_ = r.store.Append(ctx, session.ID, schema.AssistantMessage(content, nil))
 
 	return nil
 }
 
-func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator[*adk.AgentEvent]) (string, *adk.InterruptInfo, error) {
-	ec := &EventContext{
-		Ctx:       ctx,
-		Collector: &strings.Builder{},
-		Sink:      r.sink,
-	}
+func (r *Runner) streamEvent(ctx context.Context, iter *adk.AsyncIterator[*adk.AgentEvent]) ([]*schema.Message, *adk.InterruptInfo, error) {
+	ec := NewEventContext(ctx, r.sink)
 
-	ec.Sink.Output(sink.Event{Type: "message", Content: "🤖: "})
+	ec.Emit(sink.Chunk{Kind: sink.KindMessage, Content: "🤖: "})
 	for {
 		event, ok := iter.Next()
 		if !ok {
@@ -108,50 +110,50 @@ func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator
 
 		interruptInfo, err := r.handler.HandleEvent(ec, event)
 		if err != nil {
-			return "", nil, err
+			return nil, nil, err
 		}
 		if interruptInfo != nil {
-			return ec.Collector.String(), interruptInfo, nil
+			return ec.Messages(), interruptInfo, nil
 		}
 	}
 
-	return ec.Collector.String(), nil, nil
+	return ec.Messages(), nil, nil
 }
 
-func (r *Runner) Resume(ctx context.Context, checkPointID string, resumeData map[string]any) (string, *adk.InterruptInfo, error) {
+func (r *Runner) Resume(ctx context.Context, checkPointID string, resumeData map[string]any) ([]*schema.Message, *adk.InterruptInfo, error) {
 	events, err := r.inner.ResumeWithParams(ctx, checkPointID, &adk.ResumeParams{
 		Targets: resumeData,
 	})
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to resume: %w", err)
+		return nil, nil, fmt.Errorf("failed to resume: %w", err)
 	}
-	return r.processEventStream(ctx, events)
+	return r.streamEvent(ctx, events)
 }
 
-func (r *Runner) handleInterrupt(ctx context.Context, checkPointID string, interruptInfo *adk.InterruptInfo) (string, *adk.InterruptInfo, error) {
+func (r *Runner) handleInterrupt(ctx context.Context, checkPointID string, interruptInfo *adk.InterruptInfo) ([]*schema.Message, *adk.InterruptInfo, error) {
 	for _, ic := range interruptInfo.InterruptContexts {
 		if !ic.IsRootCause {
 			continue
 		}
 
 		if r.approver == nil {
-			return "", nil, fmt.Errorf("interrupt occurred but no approval handler configured")
+			return nil, nil, fmt.Errorf("interrupt occurred but no approval handler configured")
 		}
 
 		result, err := r.approver.GetApproval(ctx, ic)
 		if err != nil {
-			return "", nil, fmt.Errorf("approval failed: %w", err)
+			return nil, nil, fmt.Errorf("approval failed: %w", err)
 		}
 
-		content, newInterruptInfo, err := r.Resume(ctx, checkPointID, map[string]any{
+		messages, newInterruptInfo, err := r.Resume(ctx, checkPointID, map[string]any{
 			ic.ID: result,
 		})
 		if err != nil {
-			return "", nil, err
+			return nil, nil, err
 		}
 
-		return content, newInterruptInfo, nil
+		return messages, newInterruptInfo, nil
 	}
 
-	return "", nil, fmt.Errorf("no root cause interrupt context found")
+	return nil, nil, fmt.Errorf("no root cause interrupt context found")
 }
