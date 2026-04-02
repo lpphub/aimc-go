@@ -88,12 +88,12 @@ assistant/
 │   └── approval.go            # ApprovalInfo + ApprovalResult 定义
 
 ├── agent/                     # Agent 配置
-│   ├── agent.go               # agent.New() 创建逻辑
+│   ├── agent.go               # Agent 创建入口（New + buildAgent）
+│   ├── config.go              # Config 结构体 + 函数式选项
 │   ├── llm/                   # LLM 提供者配置
-│   ├── middleware/            # 中间件（审批、工具安全等）
+│   ├── middleware/            # 中间件（审批、工具安全、内置中间件）
 │   ├── tools/                 # 工具定义
-│   ├── prompts/               # 提示词模板
-│   └── presets.go             # 预设配置
+│   └── prompts/               # 提示词模板
 
 └── api/                       # HTTP 层
     └── handler.go             # SSE + Approval HTTP handlers
@@ -317,6 +317,34 @@ func (h *Handler) Approval(w http.ResponseWriter, r *http.Request) {
 | 新输出格式（如 WebSocket） | 实现 Sink 接口 |
 | 新存储后端（如 Redis） | 实现 Store 接口 |
 | 新消息类型 | 添加 ChunkType 常量，在 handleAgentEvent 中处理 |
+| 自定义 Agent 配置 | 使用 `agent.WithProjectRoot()`, `agent.WithSkillDir()` 等选项 |
+
+## Agent 配置
+
+Agent 支持通过函数式选项配置：
+
+```go
+// 使用默认配置
+ag, _ := agent.New(ctx)
+
+// 自定义配置
+ag, _ := agent.New(ctx,
+    agent.WithProjectRoot("/path/to/project"),
+    agent.WithSkillDir("/path/to/skills"),
+    agent.WithModel(customModel),
+    agent.WithTools(customTools),
+    agent.WithMiddlewares(customMiddlewares),
+)
+```
+
+**可用选项：**
+| 选项 | 说明 |
+|------|------|
+| `WithProjectRoot(path)` | 设置项目根目录（用于 Prompt 模板中的绝对路径） |
+| `WithSkillDir(path)` | 设置 Skill 目录（为空则不启用 Skill 中间件） |
+| `WithModel(m)` | 自定义 LLM 模型 |
+| `WithTools(tools)` | 自定义工具集 |
+| `WithMiddlewares(mw)` | 自定义中间件 |
 
 ## 设计原则
 
