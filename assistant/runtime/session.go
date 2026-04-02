@@ -3,6 +3,7 @@ package runtime
 import (
 	"aimc-go/assistant/sink"
 	"context"
+	"sync"
 
 	"github.com/cloudwego/eino/schema"
 )
@@ -30,8 +31,9 @@ type Session struct {
 	// CLI 场景：阻塞回调（可选）
 	OnInput func(ctx context.Context) (*InputEvent, error)
 
-	ctx      context.Context
-	messages []*schema.Message
+	ctx        context.Context
+	messages   []*schema.Message
+	closeOnce  sync.Once
 }
 
 // NewSession 创建 Session
@@ -80,8 +82,10 @@ func (s *Session) Messages() []*schema.Message {
 
 // Close 关闭 session（关闭 InputChan）
 func (s *Session) Close() {
-	// 只关闭非 nil 的 channel（CLI 场景可能不使用）
-	if s.InputChan != nil {
-		close(s.InputChan)
-	}
+	s.closeOnce.Do(func() {
+		// 只关闭非 nil 的 channel（CLI 场景可能不使用）
+		if s.InputChan != nil {
+			close(s.InputChan)
+		}
+	})
 }
