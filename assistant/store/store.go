@@ -193,6 +193,10 @@ func (s *JSONLStore) ListSessions() ([]*Session, error) {
 
 // GetRecent 返回最近 N 个会话（按创建时间倒序）
 func (s *JSONLStore) GetRecent(n int) ([]*Session, error) {
+	if n <= 0 {
+		return []*Session{}, nil
+	}
+
 	sessions, err := s.ListSessions()
 	if err != nil {
 		return nil, err
