@@ -26,6 +26,8 @@ type Store interface {
 	GetOrCreate(ctx context.Context, sessionID string) (*Session, error)
 	//Append 追加一条或多条 message（支持批量写入）
 	Append(ctx context.Context, sessionID string, msgs ...*schema.Message) error
+	//ListSessions 返回所有会话（按创建时间倒序）
+	ListSessions() ([]*Session, error)
 }
 
 type JSONLStore struct {
