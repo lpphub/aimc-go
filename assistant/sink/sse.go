@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 // SSESink SSE 推送 sink
 type SSESink struct {
+	mu      sync.Mutex
 	w       http.ResponseWriter
 	flusher http.Flusher
 }
@@ -21,6 +23,9 @@ func NewSSESink(w http.ResponseWriter, flusher http.Flusher) Sink {
 }
 
 func (s *SSESink) Emit(c Chunk) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	data, err := json.Marshal(c)
 	if err != nil {
 		// marshal error, emit as error chunk
