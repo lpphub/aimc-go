@@ -13,9 +13,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// Runtime 处理 eino AgentEvent 并转换为 Chunk 输出
-type Runtime struct{}
-
 // handleAgentEvent 处理单个 agent 事件
 func (r *Runtime) handleAgentEvent(session *Session, event *adk.AgentEvent) (*adk.InterruptInfo, error) {
 	// 1. error
@@ -172,26 +169,25 @@ func (r *Runtime) truncate(s string, maxLen int) string {
 }
 
 // processEvents 迭代处理事件流
-func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk.AsyncIterator[*adk.AgentEvent]) (*adk.InterruptInfo, error) {
+func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk.AsyncIterator[*adk.AgentEvent]) (
+	[]*schema.Message, *adk.InterruptInfo, error,
+) {
 	session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "🤖: "})
 
 	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-			event, ok := iter.Next()
-			if !ok {
-				break
-			}
+		event, ok := iter.Next()
+		if !ok {
+			break
+		}
 
-			interruptInfo, err := r.handleAgentEvent(session, event)
-			if err != nil {
-				return nil, err
-			}
-			if interruptInfo != nil {
-				return interruptInfo, nil
-			}
+		interruptInfo, err := r.handleAgentEvent(session, event)
+		if err != nil {
+			return nil, nil, err
+		}
+		if interruptInfo != nil {
+			return session.Messages(), interruptInfo, nil
 		}
 	}
+
+	return session.Messages(), nil, nil
 }
