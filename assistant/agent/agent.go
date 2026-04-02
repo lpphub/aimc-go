@@ -4,6 +4,7 @@ import (
 	"aimc-go/assistant/agent/llm"
 	"aimc-go/assistant/agent/middleware"
 	"aimc-go/assistant/agent/prompts"
+	"aimc-go/assistant/agent/tools"
 	"context"
 	"fmt"
 	"strings"
@@ -14,58 +15,78 @@ import (
 	"github.com/cloudwego/eino/compose"
 )
 
-type AgentConfig struct {
-	Name          string
-	Description   string
-	Instruction   string
-	MaxIterations int // 0 defaults to 50
+// New 创建默认 Agent
+func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
+	cfg := defaultConfig()
+	for _, opt := range opts {
+		opt(cfg)
+	}
 
-	Model       model.ToolCallingChatModel     // required
-	Tools       []tool.BaseTool                // required
-	Middlewares []adk.ChatModelAgentMiddleware // required
-}
-
-func New(ctx context.Context) (adk.Agent, error) {
 	// 1. model
 	cm, err := llm.NewChatModel(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("❌ Failed to create model: %v\n", err)
+		return nil, fmt.Errorf("create model: %w", err)
 	}
 
-	// 2. tools — 使用默认工具集
-	agentTools, err := PresetTools(cm)
-	if err != nil {
-		return nil, fmt.Errorf("❌ Failed to initialize tools: %v\n", err)
+	// 2. tools
+	agentTools := cfg.Tools
+	if agentTools == nil {
+		agentTools, err = tools.InitTools(cm)
+		if err != nil {
+			return nil, fmt.Errorf("init tools: %w", err)
+		}
 	}
 
-	// 3. middlewares — 使用默认中间件
-	middlewares, err := PresetMiddlewares(ctx, cm, middleware.Config{
-		SkillDir: "/home/lsk/projects/eino-demo/ext/skills",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("❌ Failed to setup middlewares: %v\n", err)
+	// 3. middlewares
+	middlewares := cfg.Middlewares
+	if middlewares == nil {
+		middlewares, err = middleware.SetupMiddlewares(ctx, cm, middleware.Config{
+			SkillDir: cfg.SkillDir,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("setup middlewares: %w", err)
+		}
 	}
 
-	// 4. agent
-	ag, err := buildAgent(ctx, AgentConfig{
-		Name:          "enio-assistant",
-		Description:   "enio tutorial assistant",
-		Instruction:   prompts.GetEinoAssistant("/home/lsk/projects/eino-demo"),
+	// 4. instruction
+	instruction := prompts.EinoAssistant
+	if cfg.ProjectRoot != "" {
+		instruction = prompts.GetEinoAssistant(cfg.ProjectRoot)
+	}
+
+	// 5. build agent
+	return buildAgent(ctx, buildConfig{
+		Name:          cfg.Name,
+		Description:   cfg.Description,
+		Instruction:   instruction,
+		MaxIterations: cfg.MaxIterations,
 		Model:         cm,
 		Tools:         agentTools,
 		Middlewares:   middlewares,
-		MaxIterations: 50,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("❌ Failed to create agent: %v\n", err)
-	}
-
-	return ag, nil
 }
 
-func buildAgent(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, err
+// buildConfig 构建参数（内部使用）
+type buildConfig struct {
+	Name          string
+	Description   string
+	Instruction   string
+	MaxIterations int
+
+	Model       model.ToolCallingChatModel
+	Tools       []tool.BaseTool
+	Middlewares []adk.ChatModelAgentMiddleware
+}
+
+func buildAgent(ctx context.Context, cfg buildConfig) (adk.Agent, error) {
+	if cfg.Model == nil {
+		return nil, fmt.Errorf("model is required")
+	}
+	if len(cfg.Tools) == 0 {
+		return nil, fmt.Errorf("tools is required")
+	}
+	if len(cfg.Middlewares) == 0 {
+		return nil, fmt.Errorf("middlewares is required")
 	}
 
 	if cfg.MaxIterations == 0 {
@@ -87,28 +108,13 @@ func buildAgent(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
 		ModelRetryConfig: &adk.ModelRetryConfig{
 			MaxRetries: 3,
 			IsRetryAble: func(ctx context.Context, err error) bool {
-				// 429 限流错误可重试
 				return strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "qpm limit")
 			},
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create agent: %w", err)
+		return nil, fmt.Errorf("create agent: %w", err)
 	}
 
 	return ag, nil
-}
-
-// Validate 验证 AgentConfig 配置
-func (c *AgentConfig) Validate() error {
-	if c.Model == nil {
-		return fmt.Errorf("model is required")
-	}
-	if len(c.Tools) == 0 {
-		return fmt.Errorf("tools is required, use agent.PresetTools(cm) for built-in tools")
-	}
-	if len(c.Middlewares) == 0 {
-		return fmt.Errorf("middlewares is required, use agent.PresetMiddlewares(ctx, cm, middleware.Config{}) for built-in middlewares")
-	}
-	return nil
 }

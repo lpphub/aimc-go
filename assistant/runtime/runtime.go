@@ -36,8 +36,8 @@ func WithCheckpointStore(cs adk.CheckPointStore) RuntimeOption {
 	}
 }
 
-// NewRuntime 创建 Runtime
-func NewRuntime(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
+// New 创建 Runtime
+func New(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
 	r := &Runtime{
 		agent:           agent,
 		checkpointStore: adkstore.NewInMemoryStore(), // 默认内存 checkpoint

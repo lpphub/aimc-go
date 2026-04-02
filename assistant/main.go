@@ -9,31 +9,35 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
-func Cli() {
+// RunCLI 运行 CLI 模式
+// 使用默认 Agent 配置，如需自定义可传入 agent.WithXxx() 选项
+func RunCLI(opts ...agent.Option) {
 	ctx := context.Background()
 
-	assistantAgent, err := agent.New(ctx)
+	// 创建 Agent（使用默认配置或传入的自定义选项）
+	assistantAgent, err := agent.New(ctx, opts...)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	scanner := bufio.NewScanner(os.Stdin)
-	builder := runtime.NewCLISessionBuilder(scanner)
 	jsonlStore := store.NewJSONLStore("./data/sessions")
 
-	rt, err := runtime.NewRuntime(assistantAgent, runtime.WithStore(jsonlStore))
+	rt, err := runtime.New(assistantAgent, runtime.WithStore(jsonlStore))
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	sessionID := "e69dfa6e-820a-4fcf-8a23-40107b0a324f"
+	sessionID := uuid.New().String()
+	scanner := bufio.NewScanner(os.Stdin)
 
 	// Session 代表一个会话，在多轮对话期间保持
-	session, err := builder.Build(ctx, sessionID)
+	session, err := runtime.NewCLISessionBuilder(scanner).Build(ctx, sessionID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
