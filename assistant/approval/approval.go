@@ -29,6 +29,7 @@ type ApprovalHandler interface {
 type ApprovalInfo struct {
 	ToolName        string
 	ArgumentsInJSON string
+	InterruptID     string
 }
 
 func (ai *ApprovalInfo) String() string {
@@ -54,6 +55,7 @@ func (p *CLIApprovalHandler) GetApproval(_ context.Context, ic *adk.InterruptCtx
 	if !ok {
 		return nil, fmt.Errorf("unexpected interrupt info type: %T", ic.Info)
 	}
+	info.InterruptID = ic.ID
 
 	p.sink.Emit(sink.Chunk{Kind: sink.KindMessage, Content: info.String()})
 
