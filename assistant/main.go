@@ -33,8 +33,8 @@ func RunCLI(opts ...agent.Option) {
 		os.Exit(1)
 	}
 
-	sessionID := uuid.New().String()
 	scanner := bufio.NewScanner(os.Stdin)
+	sessionID := uuid.New().String()
 
 	// Session 代表一个会话，在多轮对话期间保持
 	session, err := runtime.NewCLISessionBuilder(scanner).Build(ctx, sessionID)

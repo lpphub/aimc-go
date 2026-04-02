@@ -49,7 +49,7 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 	}
 
 	// 4. instruction
-	instruction := prompts.EinoAssistant
+	instruction := prompts.CodeAssistant
 	if cfg.ProjectRoot != "" {
 		instruction = prompts.GetEinoAssistant(cfg.ProjectRoot)
 	}

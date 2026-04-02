@@ -2,15 +2,15 @@ package prompts
 
 import "fmt"
 
-// EinoAssistant 默认 Prompt
-const EinoAssistant = `You are a helpful AI assistant.
+// CodeAssistant 默认 Prompt
+const CodeAssistant = `You are a helpful AI assistant.
 
 You can help users with various tasks including answering questions, writing code, and more.
 
 When using filesystem tools, always use absolute paths.`
 
-// EinoTutorial 带项目根目录的 Prompt 模板
-const EinoTutorial = `You are a helpful assistant that helps users learn the Eino framework.
+// EinoAssistant 带项目根目录的 Prompt 模板
+const EinoAssistant = `You are a helpful assistant that helps users learn the Eino framework.
 
 IMPORTANT: When using filesystem tools (ls, read_file, glob, grep, etc.), you MUST use absolute paths.
 
@@ -24,5 +24,5 @@ Always use absolute paths when calling filesystem tools.`
 
 // GetEinoAssistant 返回带项目根目录的 Prompt
 func GetEinoAssistant(root string) string {
-	return fmt.Sprintf(EinoTutorial, root, root, root, root)
+	return fmt.Sprintf(EinoAssistant, root, root, root, root)
 }
