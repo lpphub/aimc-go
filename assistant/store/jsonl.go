@@ -20,6 +20,14 @@ type JSONLStore struct {
 	Cache map[string]*Session
 }
 
+// NewJSONLStore creates a new JSONLStore with the given directory path.
+func NewJSONLStore(dir string) *JSONLStore {
+	return &JSONLStore{
+		Dir:   dir,
+		Cache: make(map[string]*Session),
+	}
+}
+
 // GetOrCreate returns the session for id, creating it if it does not exist.
 func (s *JSONLStore) GetOrCreate(_ context.Context, sessionID string) (*Session, error) {
 	s.mu.Lock()

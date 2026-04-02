@@ -2,7 +2,8 @@ package assistant
 
 import (
 	"aimc-go/assistant/agent"
-	"aimc-go/assistant/approval"
+	"aimc-go/assistant/runtime"
+	"aimc-go/assistant/store"
 	"bufio"
 	"context"
 	"fmt"
@@ -14,22 +15,16 @@ func Cli() {
 	ctx := context.Background()
 
 	assistantAgent, err := agent.New(ctx)
-
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
-	sink := agent.StdoutSink()
-	store := agent.JSONLStore("./data/sessions")
-	approvalHandler := approval.NewCLIApprovalHandler(scanner, sink)
+	builder := runtime.NewCLISessionBuilder(scanner)
+	jsonlStore := store.NewJSONLStore("./data/sessions")
 
-	runner, err := agent.NewRunner(assistantAgent,
-		agent.WithStore(store),
-		agent.WithSink(sink),
-		agent.WithApprovalHandler(approvalHandler),
-	)
+	rt, err := runtime.NewRuntime(assistantAgent, runtime.WithStore(jsonlStore))
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
@@ -47,15 +42,23 @@ func Cli() {
 			break
 		}
 
-		err = runner.Run(ctx, sessionID, line)
+		session, err := builder.Build(ctx, sessionID)
 		if err != nil {
-			_, _ = fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+
+		err = rt.Run(ctx, session, line)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
+		session.Close()
 	}
 
 	if err = scanner.Err(); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
