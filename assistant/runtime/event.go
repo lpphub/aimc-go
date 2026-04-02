@@ -181,7 +181,7 @@ func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk
 		default:
 			event, ok := iter.Next()
 			if !ok {
-				break
+				return session.Messages(), nil, nil // 迭代结束，直接返回
 			}
 
 			interruptInfo, err := r.handleAgentEvent(session, event)
@@ -193,6 +193,4 @@ func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk
 			}
 		}
 	}
-
-	return session.Messages(), nil, nil
 }
