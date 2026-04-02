@@ -32,6 +32,14 @@ func Cli() {
 
 	sessionID := "e69dfa6e-820a-4fcf-8a23-40107b0a324f"
 
+	// Session 代表一个会话，在多轮对话期间保持
+	session, err := builder.Build(ctx, sessionID)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer session.Close()
+
 	for {
 		_, _ = fmt.Fprint(os.Stdout, "👤: ")
 		if !scanner.Scan() {
@@ -42,19 +50,11 @@ func Cli() {
 			break
 		}
 
-		session, err := builder.Build(ctx, sessionID)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
 		err = rt.Run(ctx, session, line)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-
-		session.Close()
 	}
 
 	if err = scanner.Err(); err != nil {
