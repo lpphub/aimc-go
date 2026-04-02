@@ -108,7 +108,6 @@ func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator
 
 		interruptInfo, err := r.handler.HandleEvent(ec, event)
 		if err != nil {
-			ec.Sink.Output(sink.Event{Type: "message", Content: event.Err.Error()})
 			return "", nil, err
 		}
 		if interruptInfo != nil {

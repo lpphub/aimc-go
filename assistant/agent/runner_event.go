@@ -24,6 +24,11 @@ type EventHandler struct {
 func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) (*adk.InterruptInfo, error) {
 	// 1. error
 	if event.Err != nil {
+		ec.Sink.Output(sink.Event{Type: "message", Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
+		// 不中断，当作正常结束
+		if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
+			return nil, nil
+		}
 		return nil, event.Err
 	}
 
@@ -61,7 +66,6 @@ func (e *EventHandler) HandleEvent(ec *EventContext, event *adk.AgentEvent) (*ad
 	if mv.IsStreaming {
 		return nil, e.handleStreaming(ec, mv)
 	}
-
 	return nil, e.handleNonStreaming(ec, mv)
 }
 
