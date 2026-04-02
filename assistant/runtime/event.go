@@ -175,17 +175,22 @@ func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk
 	session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "🤖: "})
 
 	for {
-		event, ok := iter.Next()
-		if !ok {
-			break
-		}
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		default:
+			event, ok := iter.Next()
+			if !ok {
+				break
+			}
 
-		interruptInfo, err := r.handleAgentEvent(session, event)
-		if err != nil {
-			return nil, nil, err
-		}
-		if interruptInfo != nil {
-			return session.Messages(), interruptInfo, nil
+			interruptInfo, err := r.handleAgentEvent(session, event)
+			if err != nil {
+				return nil, nil, err
+			}
+			if interruptInfo != nil {
+				return session.Messages(), interruptInfo, nil
+			}
 		}
 	}
 
