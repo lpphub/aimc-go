@@ -167,12 +167,8 @@ func (r *Runtime) truncate(s string, maxLen int) string {
 	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
-	// 按 rune 截断，避免破坏多字节字符
 	runes := []rune(s)
-	if len(runes) > maxLen {
-		return string(runes[:maxLen]) + "..."
-	}
-	return s
+	return string(runes[:maxLen]) + "..."
 }
 
 // processEvents 迭代处理事件流
@@ -180,19 +176,22 @@ func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk
 	session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "🤖: "})
 
 	for {
-		event, ok := iter.Next()
-		if !ok {
-			break
-		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			event, ok := iter.Next()
+			if !ok {
+				break
+			}
 
-		interruptInfo, err := r.handleAgentEvent(session, event)
-		if err != nil {
-			return nil, err
-		}
-		if interruptInfo != nil {
-			return interruptInfo, nil
+			interruptInfo, err := r.handleAgentEvent(session, event)
+			if err != nil {
+				return nil, err
+			}
+			if interruptInfo != nil {
+				return interruptInfo, nil
+			}
 		}
 	}
-
-	return nil, nil
 }
