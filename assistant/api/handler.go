@@ -2,8 +2,8 @@ package api
 
 import (
 	"aimc-go/assistant/approval"
+	"aimc-go/assistant/channel"
 	"aimc-go/assistant/runtime"
-	"aimc-go/assistant/sink"
 	"encoding/json"
 	"net/http"
 )
@@ -11,14 +11,14 @@ import (
 // Handler HTTP handler
 type Handler struct {
 	rt             *runtime.Runtime
-	sessionBuilder *runtime.SSESessionBuilder
+	channelBuilder *channel.SSEChannelBuilder
 }
 
 // NewHandler 创建 Handler
 func NewHandler(rt *runtime.Runtime) *Handler {
 	return &Handler{
 		rt:             rt,
-		sessionBuilder: runtime.NewSSESessionBuilder(),
+		channelBuilder: channel.NewSSEChannelBuilder(),
 	}
 }
 
@@ -49,24 +49,20 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	session, err := h.sessionBuilder.Build(ctx, req.SessionID, w, flusher)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	ch := h.channelBuilder.Build(req.SessionID, w, flusher)
 
 	// 异步运行 runtime
 	go func() {
-		err := h.rt.Run(ctx, session, req.Query)
+		err := h.rt.Run(ctx, ch, req.Query)
 		if err != nil {
-			session.Emit(sink.Chunk{
-				Type:    sink.TypeError,
+			ch.Emit(channel.Chunk{
+				Type:    channel.TypeError,
 				Content: err.Error(),
 			})
 		}
-		// 运行结束后清理 session
-		h.sessionBuilder.RemoveSession(req.SessionID)
-		session.Close()
+		// 运行结束后清理 channel
+		h.channelBuilder.Remove(req.SessionID)
+		ch.Close()
 	}()
 
 	// 阻塞保持连接
@@ -89,7 +85,7 @@ func (h *Handler) Approval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := &approval.ApprovalResult{
+	result := &approval.Result{
 		Approved:         req.Approved,
 		DisapproveReason: nil,
 	}
@@ -97,7 +93,7 @@ func (h *Handler) Approval(w http.ResponseWriter, r *http.Request) {
 		result.DisapproveReason = &req.Reason
 	}
 
-	err := h.sessionBuilder.SubmitApproval(req.SessionID, result)
+	err := h.channelBuilder.SubmitApproval(req.SessionID, result)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return

@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"aimc-go/assistant/sink"
+	"aimc-go/assistant/channel"
 	"context"
 	"errors"
 	"fmt"
@@ -13,26 +13,28 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// handleAgentEvent 处理单个 agent 事件
-func (r *Runtime) handleAgentEvent(session *Session, event *adk.AgentEvent) (*adk.InterruptInfo, error) {
+// handleAgentEvent 处理单个 agent 事件，返回新产生的消息
+func (r *Runtime) handleAgentEvent(ch *channel.Channel, event *adk.AgentEvent) (
+	*schema.Message, *adk.InterruptInfo, error,
+) {
 	// 1. error
 	if event.Err != nil {
-		session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
+		ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
 		// 不中断，当作正常结束
 		if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, event.Err
+		return nil, nil, event.Err
 	}
 
 	// 2. action
 	if event.Action != nil {
-		return r.handleAction(session, event.Action), nil
+		return nil, r.handleAction(ch, event.Action), nil
 	}
 
 	// 3. message
 	if event.Output == nil || event.Output.MessageOutput == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	mv := event.Output.MessageOutput
@@ -41,54 +43,52 @@ func (r *Runtime) handleAgentEvent(session *Session, event *adk.AgentEvent) (*ad
 	if mv.Role == schema.Tool {
 		result, err := mv.GetMessage()
 		if err != nil {
-			return nil, fmt.Errorf("get tool_result error: %w", err)
+			return nil, nil, fmt.Errorf("get tool_result error: %w", err)
 		}
 
-		// 收集完整的 tool result 消息
-		session.Collect(result)
-
-		session.Emit(sink.Chunk{
-			Type:    sink.TypeToolResult,
+		ch.Emit(channel.Chunk{
+			Type:    channel.TypeToolResult,
 			Content: fmt.Sprintf("✅ [tool result] -> %s: %s\n", mv.ToolName, r.truncate(result.Content, 200)),
 		})
-		return nil, nil
+		return result, nil, nil
 	}
 
 	// 只处理 assistant
 	if mv.Role != schema.Assistant && mv.Role != "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	if mv.IsStreaming {
-		return nil, r.handleStreaming(session, mv)
+		msg, err := r.handleStreaming(ch, mv)
+		return msg, nil, err
 	}
-	return nil, r.handleNonStreaming(session, mv)
+	return r.handleNonStreaming(ch, mv), nil, nil
 }
 
 // handleAction 处理 interrupt/transfer/exit
-func (r *Runtime) handleAction(session *Session, action *adk.AgentAction) *adk.InterruptInfo {
+func (r *Runtime) handleAction(ch *channel.Channel, action *adk.AgentAction) *adk.InterruptInfo {
 	if action.Interrupted != nil {
-		session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "⏸️ interrupted \n"})
+		ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: "⏸️ interrupted \n"})
 		return action.Interrupted
 	}
 
 	if action.TransferToAgent != nil {
-		session.Emit(sink.Chunk{
-			Type:    sink.TypeMessage,
+		ch.Emit(channel.Chunk{
+			Type:    channel.TypeMessage,
 			Content: fmt.Sprintf("➡️ transfer to %s\n", action.TransferToAgent.DestAgentName),
 		})
 		return nil
 	}
 
 	if action.Exit {
-		session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "🏁 exit\n"})
+		ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: "🏁 exit\n"})
 	}
 
 	return nil
 }
 
-// handleStreaming 处理流式消息
-func (r *Runtime) handleStreaming(session *Session, mv *adk.MessageVariant) error {
+// handleStreaming 处理流式消息，返回完整消息
+func (r *Runtime) handleStreaming(ch *channel.Channel, mv *adk.MessageVariant) (*schema.Message, error) {
 	mv.MessageStream.SetAutomaticClose()
 
 	var contentBuf strings.Builder
@@ -100,7 +100,7 @@ func (r *Runtime) handleStreaming(session *Session, mv *adk.MessageVariant) erro
 			break
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if frame == nil {
 			continue
@@ -108,7 +108,7 @@ func (r *Runtime) handleStreaming(session *Session, mv *adk.MessageVariant) erro
 
 		if frame.Content != "" {
 			contentBuf.WriteString(frame.Content)
-			session.Emit(sink.Chunk{Type: sink.TypeAssistant, Content: frame.Content})
+			ch.Emit(channel.Chunk{Type: channel.TypeAssistant, Content: frame.Content})
 		}
 
 		if len(frame.ToolCalls) > 0 {
@@ -117,46 +117,41 @@ func (r *Runtime) handleStreaming(session *Session, mv *adk.MessageVariant) erro
 	}
 
 	// 换行
-	session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "\n"})
+	ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: "\n"})
 
 	// tool call 输出（展示）
 	for _, tc := range accumulatedToolCalls {
-		session.Emit(sink.Chunk{
-			Type:    sink.TypeToolCall,
+		ch.Emit(channel.Chunk{
+			Type:    channel.TypeToolCall,
 			Content: fmt.Sprintf("🔧 [tool call] -> %s: %s\n", tc.Function.Name, r.truncate(tc.Function.Arguments, 200)),
 		})
 	}
 
-	// 收集完整的 assistant 消息（content + ToolCalls）
-	session.Collect(&schema.Message{
+	// 返回完整的 assistant 消息（content + ToolCalls）
+	return &schema.Message{
 		Role:      schema.Assistant,
 		Content:   contentBuf.String(),
 		ToolCalls: accumulatedToolCalls,
-	})
-
-	return nil
+	}, nil
 }
 
-// handleNonStreaming 处理非流式消息
-func (r *Runtime) handleNonStreaming(session *Session, mv *adk.MessageVariant) error {
+// handleNonStreaming 处理非流式消息，返回消息
+func (r *Runtime) handleNonStreaming(ch *channel.Channel, mv *adk.MessageVariant) *schema.Message {
 	if mv.Message == nil {
 		return nil
 	}
 
 	// 输出展示
-	session.Emit(sink.Chunk{Type: sink.TypeAssistant, Content: mv.Message.Content})
+	ch.Emit(channel.Chunk{Type: channel.TypeAssistant, Content: mv.Message.Content})
 
 	for _, tc := range mv.Message.ToolCalls {
-		session.Emit(sink.Chunk{
-			Type:    sink.TypeToolCall,
+		ch.Emit(channel.Chunk{
+			Type:    channel.TypeToolCall,
 			Content: fmt.Sprintf("\n🔧 [tool call] -> %s: %s\n", tc.Function.Name, r.truncate(tc.Function.Arguments, 200)),
 		})
 	}
 
-	// 收集完整的 assistant 消息
-	session.Collect(mv.Message)
-
-	return nil
+	return mv.Message
 }
 
 // truncate 截断字符串，按 rune 截断避免破坏多字节字符
@@ -168,11 +163,13 @@ func (r *Runtime) truncate(s string, maxLen int) string {
 	return string(runes[:maxLen]) + "..."
 }
 
-// processEvents 迭代处理事件流
-func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk.AsyncIterator[*adk.AgentEvent]) (
+// processEvents 迭代处理事件流，本地收集消息
+func (r *Runtime) processEvents(ctx context.Context, ch *channel.Channel, iter *adk.AsyncIterator[*adk.AgentEvent]) (
 	[]*schema.Message, *adk.InterruptInfo, error,
 ) {
-	session.Emit(sink.Chunk{Type: sink.TypeMessage, Content: "🤖: "})
+	ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: "🤖: "})
+
+	messages := make([]*schema.Message, 0, 20)
 
 	for {
 		select {
@@ -181,15 +178,18 @@ func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk
 		default:
 			event, ok := iter.Next()
 			if !ok {
-				return session.Messages(), nil, nil // 迭代结束，直接返回
+				return messages, nil, nil // 迭代结束，返回收集的消息
 			}
 
-			interruptInfo, err := r.handleAgentEvent(session, event)
+			msg, interruptInfo, err := r.handleAgentEvent(ch, event)
 			if err != nil {
 				return nil, nil, err
 			}
+			if msg != nil {
+				messages = append(messages, msg)
+			}
 			if interruptInfo != nil {
-				return session.Messages(), interruptInfo, nil
+				return messages, interruptInfo, nil
 			}
 		}
 	}

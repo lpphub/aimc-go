@@ -2,6 +2,7 @@ package assistant
 
 import (
 	"aimc-go/assistant/agent"
+	"aimc-go/assistant/channel"
 	"aimc-go/assistant/runtime"
 	"aimc-go/assistant/store"
 	"bufio"
@@ -36,13 +37,9 @@ func RunCLI(opts ...agent.Option) {
 	scanner := bufio.NewScanner(os.Stdin)
 	sessionID := uuid.New().String()
 
-	// Session 代表一个会话，在多轮对话期间保持
-	session, err := runtime.NewCLISessionBuilder(scanner).Build(ctx, sessionID)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	defer session.Close()
+	// Channel 代表交互通道，在多轮对话期间保持
+	ch := channel.NewCLIChannelBuilder(scanner).Build(sessionID)
+	defer ch.Close()
 
 	for {
 		_, _ = fmt.Fprint(os.Stdout, "👤: ")
@@ -54,7 +51,7 @@ func RunCLI(opts ...agent.Option) {
 			break
 		}
 
-		err = rt.Run(ctx, session, line)
+		err = rt.Run(ctx, ch, line)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)

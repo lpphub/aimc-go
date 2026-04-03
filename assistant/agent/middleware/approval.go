@@ -27,12 +27,12 @@ func NewApprovalMiddleware(toolsToApprove ...string) *ApprovalMiddleware {
 }
 
 // checkApproval 检查审批状态。返回 resumeData 和审批结果（nil 表示需要触发/重新触发中断）
-func (m *ApprovalMiddleware) checkApproval(ctx context.Context, args string) (storedArgs string, result *approval.ApprovalResult) {
+func (m *ApprovalMiddleware) checkApproval(ctx context.Context, args string) (storedArgs string, result *approval.Result) {
 	wasInterrupted, _, storedArgs := tool.GetInterruptState[string](ctx)
 	if !wasInterrupted {
 		return args, nil
 	}
-	_, _, result = tool.GetResumeContext[*approval.ApprovalResult](ctx)
+	_, _, result = tool.GetResumeContext[*approval.Result](ctx)
 	return storedArgs, result
 }
 
@@ -46,7 +46,7 @@ func (m *ApprovalMiddleware) WrapInvokableToolCall(_ context.Context, endpoint a
 		storedArgs, result := m.checkApproval(ctx, args)
 
 		if result == nil {
-			return "", tool.StatefulInterrupt(ctx, &approval.ApprovalInfo{
+			return "", tool.StatefulInterrupt(ctx, &approval.Info{
 				ToolName:        tCtx.Name,
 				ArgumentsInJSON: storedArgs,
 			}, storedArgs)
@@ -72,7 +72,7 @@ func (m *ApprovalMiddleware) WrapStreamableToolCall(_ context.Context, endpoint 
 		storedArgs, result := m.checkApproval(ctx, args)
 
 		if result == nil {
-			return nil, tool.StatefulInterrupt(ctx, &approval.ApprovalInfo{
+			return nil, tool.StatefulInterrupt(ctx, &approval.Info{
 				ToolName:        tCtx.Name,
 				ArgumentsInJSON: storedArgs,
 			}, storedArgs)
