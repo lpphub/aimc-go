@@ -44,28 +44,41 @@ func (b *CLIChannelBuilder) Build(sessionID string) *Channel {
 
 // SSEChannelBuilder SSE 场景的 Channel 构建器
 type SSEChannelBuilder struct {
-	channels sync.Map // sessionID -> *Channel
+	mu       sync.RWMutex
+	channels map[string]*Channel // sessionID -> *Channel
 }
 
 func NewSSEChannelBuilder() *SSEChannelBuilder {
-	return &SSEChannelBuilder{}
+	return &SSEChannelBuilder{
+		channels: make(map[string]*Channel),
+	}
 }
 
-// Build 创建 SSE Channel
-func (b *SSEChannelBuilder) Build(sessionID string, w http.ResponseWriter, flusher http.Flusher) *Channel {
+// Build 创建 SSE Channel，如果会话忙则返回错误
+func (b *SSEChannelBuilder) Build(sessionID string, w http.ResponseWriter, flusher http.Flusher) (*Channel, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// 检查是否已存在（会话忙）
+	if _, ok := b.channels[sessionID]; ok {
+		return nil, fmt.Errorf("session %s is busy", sessionID)
+	}
+
 	ch := NewChannel(sessionID, NewSSESink(w, flusher))
-	b.channels.Store(sessionID, ch)
-	return ch
+	b.channels[sessionID] = ch
+	return ch, nil
 }
 
 // SubmitApproval 提交审批结果（供 HTTP handler 调用）
 func (b *SSEChannelBuilder) SubmitApproval(sessionID string, result *approval.Result) error {
-	c, ok := b.channels.Load(sessionID)
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	ch, ok := b.channels[sessionID]
 	if !ok {
 		return fmt.Errorf("channel not found: %s", sessionID)
 	}
 
-	ch := c.(*Channel)
 	ch.Input <- InputEvent{
 		Type: InputApproval,
 		Data: result,
@@ -75,5 +88,8 @@ func (b *SSEChannelBuilder) SubmitApproval(sessionID string, result *approval.Re
 
 // Remove 移除 channel（清理）
 func (b *SSEChannelBuilder) Remove(sessionID string) {
-	b.channels.Delete(sessionID)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	delete(b.channels, sessionID)
 }

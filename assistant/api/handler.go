@@ -49,7 +49,12 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	ch := h.channelBuilder.Build(req.SessionID, w, flusher)
+	ch, err := h.channelBuilder.Build(req.SessionID, w, flusher)
+	if err != nil {
+		// 会话忙，返回 409 Conflict
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
 
 	// 异步运行 runtime
 	go func() {
