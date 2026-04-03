@@ -154,15 +154,6 @@ func (r *Runtime) handleNonStreaming(ch *channel.Channel, mv *adk.MessageVariant
 	return mv.Message
 }
 
-// truncate 截断字符串，按 rune 截断避免破坏多字节字符
-func (r *Runtime) truncate(s string, maxLen int) string {
-	if utf8.RuneCountInString(s) <= maxLen {
-		return s
-	}
-	runes := []rune(s)
-	return string(runes[:maxLen]) + "..."
-}
-
 // processEvents 迭代处理事件流，本地收集消息
 func (r *Runtime) processEvents(ctx context.Context, ch *channel.Channel, iter *adk.AsyncIterator[*adk.AgentEvent]) (
 	[]*schema.Message, *adk.InterruptInfo, error,
@@ -193,4 +184,13 @@ func (r *Runtime) processEvents(ctx context.Context, ch *channel.Channel, iter *
 			}
 		}
 	}
+}
+
+// truncate 截断字符串，按 rune 截断避免破坏多字节字符
+func (r *Runtime) truncate(s string, maxLen int) string {
+	if utf8.RuneCountInString(s) <= maxLen {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:maxLen]) + "..."
 }

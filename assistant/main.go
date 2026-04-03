@@ -16,11 +16,14 @@ import (
 
 // RunCLI 运行 CLI 模式
 // 使用默认 Agent 配置，如需自定义可传入 agent.WithXxx() 选项
-func RunCLI(opts ...agent.Option) {
+func RunCLI() {
 	ctx := context.Background()
 
 	// 创建 Agent（使用默认配置或传入的自定义选项）
-	assistantAgent, err := agent.New(ctx, opts...)
+	assistantAgent, err := agent.New(ctx,
+		agent.WithProjectRoot("/Users/lsk/Projects/eino-demo"),
+		agent.WithSkillDir("/Users/lsk/Projects/eino-demo/ext/skills"),
+	)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
