@@ -22,18 +22,18 @@ type InputEvent struct {
 // Channel 双向交互通道
 type Channel struct {
 	ID      string
-	Sink    Sink                                           // 输出
-	Input   chan InputEvent                                // 输入 SSE：channel
-	OnInput func(ctx context.Context) (*InputEvent, error) // 输入 CLI：阻塞回调
+	Sink    Sink
+	Input   chan InputEvent                                // SSE 场景：channel 输入
+	OnInput func(ctx context.Context) (*InputEvent, error) // CLI 场景：阻塞回调
 
 	closeOnce sync.Once
 }
 
 // NewChannel 创建 Channel
-func NewChannel(sessionID string, s Sink) *Channel {
+func NewChannel(sessionID string, sink Sink) *Channel {
 	return &Channel{
 		ID:    sessionID,
-		Sink:  s,
+		Sink:  sink,
 		Input: make(chan InputEvent, 1),
 	}
 }

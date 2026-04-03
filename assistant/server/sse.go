@@ -1,4 +1,4 @@
-package api
+package server
 
 import (
 	"aimc-go/assistant/approval"
@@ -8,18 +8,23 @@ import (
 	"net/http"
 )
 
-// Handler HTTP handler
-type Handler struct {
-	rt             *runtime.Runtime
-	channelBuilder *channel.SSEChannelBuilder
+// SSEServer SSE 服务
+type SSEServer struct {
+	rt  *runtime.Runtime
+	hub *channel.SSEHub
 }
 
-// NewHandler 创建 Handler
-func NewHandler(rt *runtime.Runtime) *Handler {
-	return &Handler{
-		rt:             rt,
-		channelBuilder: channel.NewSSEChannelBuilder(),
+// NewSSEServer 创建 SSE 服务
+func NewSSEServer() (*SSEServer, error) {
+	rt, err := NewRuntime()
+	if err != nil {
+		return nil, err
 	}
+
+	return &SSEServer{
+		rt:  rt,
+		hub: channel.NewSSEHub(),
+	}, nil
 }
 
 // ChatRequest 聊天请求
@@ -29,7 +34,7 @@ type ChatRequest struct {
 }
 
 // Chat SSE 聊天接口
-func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
+func (s *SSEServer) Chat(w http.ResponseWriter, r *http.Request) {
 	// 设置 SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -49,7 +54,7 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	ch, err := h.channelBuilder.Build(req.SessionID, w, flusher)
+	ch, err := s.hub.Acquire(req.SessionID, w, flusher)
 	if err != nil {
 		// 会话忙，返回 409 Conflict
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -58,7 +63,7 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 
 	// 异步运行 runtime
 	go func() {
-		err := h.rt.Run(ctx, ch, req.Query)
+		err := s.rt.Run(ctx, ch, req.Query)
 		if err != nil {
 			ch.Emit(channel.Chunk{
 				Type:    channel.TypeError,
@@ -66,7 +71,7 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		// 运行结束后清理 channel
-		h.channelBuilder.Remove(req.SessionID)
+		s.hub.Release(req.SessionID)
 		ch.Close()
 	}()
 
@@ -83,7 +88,7 @@ type ApprovalRequest struct {
 }
 
 // Approval 审批回调接口
-func (h *Handler) Approval(w http.ResponseWriter, r *http.Request) {
+func (s *SSEServer) Approval(w http.ResponseWriter, r *http.Request) {
 	var req ApprovalRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -91,6 +96,7 @@ func (h *Handler) Approval(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := &approval.Result{
+		ApprovalID:       req.ApprovalID,
 		Approved:         req.Approved,
 		DisapproveReason: nil,
 	}
@@ -98,7 +104,7 @@ func (h *Handler) Approval(w http.ResponseWriter, r *http.Request) {
 		result.DisapproveReason = &req.Reason
 	}
 
-	err := h.channelBuilder.SubmitApproval(req.SessionID, result)
+	err := s.hub.SubmitApproval(req.SessionID, result)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return

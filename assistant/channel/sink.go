@@ -1,13 +1,5 @@
 package channel
 
-import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"os"
-	"sync"
-)
-
 // ChunkType 输出片段类型
 type ChunkType string
 
@@ -30,13 +22,11 @@ type Chunk struct {
 }
 
 // Sink 实时输出展示接口
-// 职责：用户交互体验（stdout/SSE/WebSocket）
-// 注意：实现必须是并发安全的，因为可能被多个 Run 并发调用
 type Sink interface {
 	Emit(Chunk)
 }
 
-// MultiSink 多 sink 组合
+// MultiSink 多 Sink 组合
 type MultiSink struct {
 	Sinks []Sink
 }
@@ -49,44 +39,4 @@ func (m *MultiSink) Emit(c Chunk) {
 	for _, s := range m.Sinks {
 		s.Emit(c)
 	}
-}
-
-// StdoutSink 标准输出
-type StdoutSink struct{}
-
-func NewStdoutSink() Sink {
-	return &StdoutSink{}
-}
-
-func (s *StdoutSink) Emit(c Chunk) {
-	_, _ = fmt.Fprint(os.Stdout, c.Content)
-}
-
-// SSESink SSE 推送 sink
-type SSESink struct {
-	mu      sync.Mutex
-	w       http.ResponseWriter
-	flusher http.Flusher
-}
-
-func NewSSESink(w http.ResponseWriter, flusher http.Flusher) Sink {
-	return &SSESink{
-		w:       w,
-		flusher: flusher,
-	}
-}
-
-func (s *SSESink) Emit(c Chunk) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := json.Marshal(c)
-	if err != nil {
-		data, _ = json.Marshal(Chunk{
-			Type:    TypeError,
-			Content: err.Error(),
-		})
-	}
-	fmt.Fprintf(s.w, "data: %s\n\n", data)
-	s.flusher.Flush()
 }

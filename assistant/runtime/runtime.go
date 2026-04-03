@@ -147,6 +147,11 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 			return fmt.Errorf("unexpected approval result type: %T", input.Data)
 		}
 
+		// 校验 ApprovalID（SSE 场景需要匹配，CLI 场景可跳过）
+		if result.ApprovalID != "" && result.ApprovalID != approvalID {
+			return fmt.Errorf("approval ID mismatch: expected %s, got %s", approvalID, result.ApprovalID)
+		}
+
 		// 发送审批结果通知
 		if result.Approved {
 			ch.Emit(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
