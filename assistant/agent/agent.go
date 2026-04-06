@@ -89,10 +89,6 @@ func buildAgent(ctx context.Context, cfg buildConfig) (adk.Agent, error) {
 		return nil, fmt.Errorf("middlewares is required")
 	}
 
-	if cfg.MaxIterations == 0 {
-		cfg.MaxIterations = 50
-	}
-
 	ag, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:          cfg.Name,
 		Description:   cfg.Description,

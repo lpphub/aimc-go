@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,6 +90,8 @@ func (s *JSONLStore) Append(ctx context.Context, sessionID string, messages ...*
 	}
 	defer f.Close()
 
+	// 使用 bufio.Writer 批量写入
+	writer := bufio.NewWriter(f)
 	for _, msg := range messages {
 		sess.Messages = append(sess.Messages, msg)
 
@@ -96,12 +99,15 @@ func (s *JSONLStore) Append(ctx context.Context, sessionID string, messages ...*
 		if err != nil {
 			return fmt.Errorf("marshal message: %w", err)
 		}
-		if _, err = f.Write(append(data, '\n')); err != nil {
+		if _, err = writer.Write(data); err != nil {
+			return err
+		}
+		if err = writer.WriteByte('\n'); err != nil {
 			return err
 		}
 	}
 
-	return nil
+	return writer.Flush()
 }
 
 func (s *JSONLStore) loadSession(filePath string) (*Session, error) {
@@ -139,6 +145,7 @@ func (s *JSONLStore) loadSession(filePath string) (*Session, error) {
 		}
 		var msg schema.Message
 		if err = json.Unmarshal([]byte(line), &msg); err != nil {
+			log.Printf("warn: failed to parse message in %s: %v", filePath, err)
 			continue
 		}
 		sess.Messages = append(sess.Messages, &msg)

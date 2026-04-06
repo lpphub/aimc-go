@@ -77,12 +77,6 @@ func (r *Runtime) Run(ctx context.Context, ch *channel.Channel, query string) er
 	iter := innerRunner.Run(ctx, sessHistory.Messages, adk.WithCheckPointID(ch.ID))
 
 	// 4. 处理事件流
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
 	messages, interruptInfo, err := r.processEvents(ctx, ch, iter)
 	if err != nil {
 		return fmt.Errorf("process events: %w", err)
@@ -97,12 +91,6 @@ func (r *Runtime) Run(ctx context.Context, ch *channel.Channel, query string) er
 
 	// 6. 处理中断（审批）
 	if interruptInfo != nil {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
 		return r.handleInterrupt(ctx, ch, interruptInfo)
 	}
 

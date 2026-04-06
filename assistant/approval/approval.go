@@ -8,7 +8,7 @@ import (
 
 // Result 审批结果
 type Result struct {
-	ApprovalID       string  // 审批 ID，用于匹配中断
+	ApprovalID       string // 审批 ID，用于匹配中断
 	Approved         bool
 	DisapproveReason *string
 }

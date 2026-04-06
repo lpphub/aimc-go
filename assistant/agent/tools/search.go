@@ -52,10 +52,7 @@ func NewSearchTool() (tool.BaseTool, error) {
 				},
 			}
 
-			if len(results) > input.Limit {
-				results = results[:input.Limit]
-			}
-
+			// mock 数据只有 2 条，无需切片
 			return &SearchOutput{
 				Query:   input.Query,
 				Results: results,

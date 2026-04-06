@@ -1,5 +1,10 @@
 package channel
 
+import (
+	"fmt"
+	"os"
+)
+
 // ChunkType 输出片段类型
 type ChunkType string
 
@@ -8,10 +13,10 @@ const (
 	TypeToolCall    ChunkType = "tool_call"
 	TypeToolResult  ChunkType = "tool_result"
 	TypeMessage     ChunkType = "message"
-	TypeApproval    ChunkType = "approval"         // 审批请求
-	TypeApprovalRes ChunkType = "approval_result"  // 审批结果
-	TypeError       ChunkType = "error"            // 错误信息
-	TypeDone        ChunkType = "done"             // 对话结束信号
+	TypeApproval    ChunkType = "approval"        // 审批请求
+	TypeApprovalRes ChunkType = "approval_result" // 审批结果
+	TypeError       ChunkType = "error"           // 错误信息
+	TypeDone        ChunkType = "done"            // 对话结束信号
 )
 
 // Chunk 输出片段
@@ -39,4 +44,15 @@ func (m *MultiSink) Emit(c Chunk) {
 	for _, s := range m.Sinks {
 		s.Emit(c)
 	}
+}
+
+// StdoutSink 标准输出（带打字机效果）
+type StdoutSink struct{}
+
+func NewStdoutSink() Sink {
+	return &StdoutSink{}
+}
+
+func (s *StdoutSink) Emit(c Chunk) {
+	fmt.Fprint(os.Stdout, c.Content)
 }

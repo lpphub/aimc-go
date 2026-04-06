@@ -13,86 +13,25 @@ import (
 	"github.com/cloudwego/eino/components/model"
 )
 
-// Config middleware configuration
-
+// setupBuiltInMiddleware 初始化内置中间件
 func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {
-	var middlewares []adk.ChatModelAgentMiddleware
-
 	backend, err := local.NewBackend(ctx, &local.Config{})
 	if err != nil {
 		return nil, err
 	}
 
-	if patchMW, err := patch(ctx); err == nil {
-		middlewares = append(middlewares, patchMW)
-	}
+	var middlewares []adk.ChatModelAgentMiddleware
 
-	if sumMW, err := sum(ctx, chatModel); err == nil {
-		middlewares = append(middlewares, sumMW)
-	}
-
-	if reductionMW, err := reduce(ctx, backend); err == nil {
-		middlewares = append(middlewares, reductionMW)
-	}
-
-	if fsMW, err := fs(ctx, backend); err == nil {
-		middlewares = append(middlewares, fsMW)
-	}
-
-	if cfg.SkillDir != "" {
-		if skillMW, err := skills(ctx, backend, cfg.SkillDir); err == nil {
-			middlewares = append(middlewares, skillMW)
-		}
-	}
-
-	return middlewares, nil
-}
-
-// fs injects file operation tools
-func fs(ctx context.Context, backend *local.Local) (adk.ChatModelAgentMiddleware, error) {
-	fsMW, err := filesystem.New(ctx, &filesystem.MiddlewareConfig{
-		Backend:        backend,
-		StreamingShell: backend,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return fsMW, nil
-}
-
-func skills(ctx context.Context, backend *local.Local, skillDir string) (adk.ChatModelAgentMiddleware, error) {
-	skillBackend, _ := skill.NewBackendFromFilesystem(ctx, &skill.BackendFromFilesystemConfig{
-		Backend: backend,
-		BaseDir: skillDir,
-	})
-	skillMW, err := skill.NewMiddleware(ctx, &skill.Config{
-		Backend: skillBackend,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return skillMW, nil
-}
-
-func patch(ctx context.Context) (adk.ChatModelAgentMiddleware, error) {
+	// patch tool calls
 	patchMW, err := patchtoolcalls.New(ctx, &patchtoolcalls.Config{})
 	if err != nil {
 		return nil, err
 	}
-	return patchMW, nil
-}
+	middlewares = append(middlewares, patchMW)
 
-func reduce(ctx context.Context, backend *local.Local) (adk.ChatModelAgentMiddleware, error) {
-	reductionMW, err := reduction.New(ctx, &reduction.Config{Backend: backend})
-	if err != nil {
-		return nil, err
-	}
-	return reductionMW, nil
-}
-
-func sum(ctx context.Context, summaryModel model.BaseChatModel) (adk.ChatModelAgentMiddleware, error) {
+	// summarization
 	sumMW, err := summarization.New(ctx, &summarization.Config{
-		Model: summaryModel,
+		Model: chatModel,
 		Trigger: &summarization.TriggerCondition{
 			ContextTokens: 100000,
 		},
@@ -100,5 +39,39 @@ func sum(ctx context.Context, summaryModel model.BaseChatModel) (adk.ChatModelAg
 	if err != nil {
 		return nil, err
 	}
-	return sumMW, nil
+	middlewares = append(middlewares, sumMW)
+
+	// reduction
+	reductionMW, err := reduction.New(ctx, &reduction.Config{Backend: backend})
+	if err != nil {
+		return nil, err
+	}
+	middlewares = append(middlewares, reductionMW)
+
+	// filesystem
+	fsMW, err := filesystem.New(ctx, &filesystem.MiddlewareConfig{
+		Backend:        backend,
+		StreamingShell: backend,
+	})
+	if err != nil {
+		return nil, err
+	}
+	middlewares = append(middlewares, fsMW)
+
+	// skills (可选)
+	if cfg.SkillDir != "" {
+		skillBackend, _ := skill.NewBackendFromFilesystem(ctx, &skill.BackendFromFilesystemConfig{
+			Backend: backend,
+			BaseDir: cfg.SkillDir,
+		})
+		skillMW, err := skill.NewMiddleware(ctx, &skill.Config{
+			Backend: skillBackend,
+		})
+		if err != nil {
+			return nil, err
+		}
+		middlewares = append(middlewares, skillMW)
+	}
+
+	return middlewares, nil
 }

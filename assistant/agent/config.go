@@ -11,7 +11,7 @@ type Config struct {
 	// Agent 基础配置
 	Name          string
 	Description   string
-	MaxIterations int // 0 默认 50
+	MaxIterations int // 默认 50
 
 	// 路径配置
 	ProjectRoot string // 项目根目录，用于 prompt 模板

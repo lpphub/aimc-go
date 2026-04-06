@@ -69,11 +69,16 @@ func (h *SSEHub) SubmitApproval(sessionID string, result *approval.Result) error
 		return fmt.Errorf("channel not found: %s", sessionID)
 	}
 
-	ch.Input <- InputEvent{
+	// 使用 select 防止向已关闭的 channel 发送导致 panic
+	select {
+	case ch.Input <- InputEvent{
 		Type: InputApproval,
 		Data: result,
+	}:
+		return nil
+	default:
+		return fmt.Errorf("channel closed or full: %s", sessionID)
 	}
-	return nil
 }
 
 // Release 释放 Channel

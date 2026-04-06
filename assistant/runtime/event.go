@@ -20,10 +20,11 @@ func (r *Runtime) handleAgentEvent(ch *channel.Channel, event *adk.AgentEvent) (
 	// 1. error
 	if event.Err != nil {
 		ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
-		// 不中断，当作正常结束
+		// ErrExceedMaxIterations 是可接受的终止，返回 nil 继续完成流程
 		if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
 			return nil, nil, nil
 		}
+		// 其他错误需要中断
 		return nil, nil, event.Err
 	}
 
@@ -163,25 +164,25 @@ func (r *Runtime) processEvents(ctx context.Context, ch *channel.Channel, iter *
 	messages := make([]*schema.Message, 0, 20)
 
 	for {
-		select {
-		case <-ctx.Done():
-			return nil, nil, ctx.Err()
-		default:
-			event, ok := iter.Next()
-			if !ok {
-				return messages, nil, nil // 迭代结束，返回收集的消息
-			}
+		event, ok := iter.Next()
+		if !ok {
+			return messages, nil, nil // 迭代结束，返回收集的消息
+		}
 
-			msg, interruptInfo, err := r.handleAgentEvent(ch, event)
-			if err != nil {
-				return nil, nil, err
-			}
-			if msg != nil {
-				messages = append(messages, msg)
-			}
-			if interruptInfo != nil {
-				return messages, interruptInfo, nil
-			}
+		// 检查 ctx 是否已取消
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
+
+		msg, interruptInfo, err := r.handleAgentEvent(ch, event)
+		if err != nil {
+			return nil, nil, err
+		}
+		if msg != nil {
+			messages = append(messages, msg)
+		}
+		if interruptInfo != nil {
+			return messages, interruptInfo, nil
 		}
 	}
 }
