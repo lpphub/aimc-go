@@ -11,16 +11,17 @@ type Config struct {
 	// Agent 基础配置
 	Name          string
 	Description   string
-	MaxIterations int // 默认 50
-
-	// 路径配置
-	ProjectRoot string // 项目根目录，用于 prompt 模板
-	SkillDir    string // skill 目录，为空则不启用 skill 中间件
+	Instruction   string // agent 指令，为空则使用默认
+	MaxIterations int    // 默认 50
 
 	// 可选覆盖（不设置则使用默认）
 	Model       model.ToolCallingChatModel
 	Tools       []tool.BaseTool
 	Middlewares []adk.ChatModelAgentMiddleware
+
+	// 路径配置
+	ProjectRoot string // 项目根目录，用于 prompt 模板
+	SkillDir    string // skill 目录，为空则不启用 skill 中间件
 }
 
 // Option 配置选项

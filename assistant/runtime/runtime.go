@@ -100,6 +100,20 @@ func (r *Runtime) Run(ctx context.Context, ch *channel.Channel, query string) er
 	return nil
 }
 
+// Resume 恢复中断的对话
+func (r *Runtime) Resume(ctx context.Context, ch *channel.Channel, checkpointID string, resumeData map[string]any) (
+	[]*schema.Message, *adk.InterruptInfo, error,
+) {
+	events, err := r.runner.ResumeWithParams(ctx, checkpointID, &adk.ResumeParams{
+		Targets: resumeData,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("resume with params: %w", err)
+	}
+
+	return r.processEvents(ctx, ch, events)
+}
+
 // handleInterrupt 处理中断（审批）
 func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, interruptInfo *adk.InterruptInfo) error {
 	for _, ic := range interruptInfo.InterruptContexts {
@@ -172,18 +186,4 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 	ch.Write(channel.Chunk{Type: channel.TypeDone})
 
 	return nil
-}
-
-// Resume 恢复中断的对话
-func (r *Runtime) Resume(ctx context.Context, ch *channel.Channel, checkpointID string, resumeData map[string]any) (
-	[]*schema.Message, *adk.InterruptInfo, error,
-) {
-	events, err := r.runner.ResumeWithParams(ctx, checkpointID, &adk.ResumeParams{
-		Targets: resumeData,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("resume with params: %w", err)
-	}
-
-	return r.processEvents(ctx, ch, events)
 }

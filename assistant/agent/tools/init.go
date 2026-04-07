@@ -11,17 +11,19 @@ import (
 func InitTools(cm model.BaseChatModel) ([]tool.BaseTool, error) {
 	var tools []tool.BaseTool
 
+	// RAG 工具
 	ragTool, err := BuildRAGTool(nil, cm)
 	if err != nil {
 		return nil, fmt.Errorf("build rag tool: %w", err)
 	}
 	tools = append(tools, ragTool)
 
-	searchTool, err := NewSearchTool()
+	// 时间工具
+	timeTool, err := NewTimeTool()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create search tool: %w", err)
+		return nil, fmt.Errorf("create time tool: %w", err)
 	}
-	tools = append(tools, searchTool)
+	tools = append(tools, timeTool)
 
 	return tools, nil
 }

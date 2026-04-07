@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"github.com/cloudwego/eino/adk"
-	"github.com/cloudwego/eino/components/model"
-	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 )
 
@@ -22,25 +20,27 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 		opt(cfg)
 	}
 
+	var err error
+
 	// 1. model
-	cm, err := llm.NewChatModel(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create model: %w", err)
+	if cfg.Model == nil {
+		cfg.Model, err = llm.NewChatModel(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("create model: %w", err)
+		}
 	}
 
 	// 2. tools
-	agentTools := cfg.Tools
-	if agentTools == nil {
-		agentTools, err = tools.InitTools(cm)
+	if cfg.Tools == nil {
+		cfg.Tools, err = tools.InitTools(cfg.Model)
 		if err != nil {
 			return nil, fmt.Errorf("init tools: %w", err)
 		}
 	}
 
 	// 3. middlewares
-	middlewares := cfg.Middlewares
-	if middlewares == nil {
-		middlewares, err = middleware.SetupMiddlewares(ctx, cm, middleware.Config{
+	if cfg.Middlewares == nil {
+		cfg.Middlewares, err = middleware.SetupMiddlewares(ctx, cfg.Model, middleware.Config{
 			SkillDir: cfg.SkillDir,
 		})
 		if err != nil {
@@ -49,36 +49,19 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 	}
 
 	// 4. instruction
-	instruction := prompts.CodeAssistant
-	if cfg.ProjectRoot != "" {
-		instruction = prompts.GetEinoAssistant(cfg.ProjectRoot)
+	if cfg.Instruction == "" {
+		if cfg.ProjectRoot != "" {
+			cfg.Instruction = prompts.GetEinoAssistant(cfg.ProjectRoot)
+		} else {
+			cfg.Instruction = prompts.CodeAssistant
+		}
 	}
 
 	// 5. build agent
-	return buildAgent(ctx, buildConfig{
-		Name:          cfg.Name,
-		Description:   cfg.Description,
-		Instruction:   instruction,
-		MaxIterations: cfg.MaxIterations,
-		Model:         cm,
-		Tools:         agentTools,
-		Middlewares:   middlewares,
-	})
+	return buildAgent(ctx, cfg)
 }
 
-// buildConfig 构建参数（内部使用）
-type buildConfig struct {
-	Name          string
-	Description   string
-	Instruction   string
-	MaxIterations int
-
-	Model       model.ToolCallingChatModel
-	Tools       []tool.BaseTool
-	Middlewares []adk.ChatModelAgentMiddleware
-}
-
-func buildAgent(ctx context.Context, cfg buildConfig) (adk.Agent, error) {
+func buildAgent(ctx context.Context, cfg *Config) (adk.Agent, error) {
 	if cfg.Model == nil {
 		return nil, fmt.Errorf("model is required")
 	}

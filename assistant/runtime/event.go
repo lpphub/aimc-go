@@ -69,7 +69,6 @@ func (r *Runtime) handleAgentEvent(ch *channel.Channel, event *adk.AgentEvent) (
 // handleAction 处理 interrupt/transfer/exit
 func (r *Runtime) handleAction(ch *channel.Channel, action *adk.AgentAction) *adk.InterruptInfo {
 	if action.Interrupted != nil {
-		ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "⏸️ interrupted \n"})
 		return action.Interrupted
 	}
 
