@@ -1,8 +1,7 @@
 package main
 
-import "aimc-go/assistant"
+import "aimc-go/assistant/server"
 
 func main() {
-	assistant.RunCLI()
-	//assistant.RunSSE(":8080")
+	server.RunCLI()
 }

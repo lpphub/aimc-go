@@ -7,6 +7,7 @@ import (
 	"aimc-go/app/modules/post"
 	"aimc-go/app/modules/user"
 	"aimc-go/app/server/middleware"
+	"aimc-go/assistant/server"
 	"context"
 	"errors"
 	"fmt"
@@ -67,8 +68,12 @@ func (a *App) registerModules() []core.Module {
 	userMod := user.New(infra.DB)
 	authMod := auth.New(userMod.Service)
 	postMod := post.New(infra.DB)
+	assistantMod, err := server.NewSSE()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to init assistant module: %v", err))
+	}
 
-	registry.Register(userMod, authMod, postMod)
+	registry.Register(userMod, authMod, postMod, assistantMod)
 	return registry.Modules()
 }
 

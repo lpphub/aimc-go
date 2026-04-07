@@ -2,7 +2,6 @@ package server
 
 import (
 	"aimc-go/assistant/channel"
-	"aimc-go/assistant/runtime"
 	"bufio"
 	"context"
 	"fmt"
@@ -12,32 +11,21 @@ import (
 	"github.com/google/uuid"
 )
 
-// CLIServer CLI 服务
-type CLIServer struct {
-	rt *runtime.Runtime
-}
-
-// NewCLIServer 创建 CLI 服务
-func NewCLIServer() (*CLIServer, error) {
+// RunCLI 运行 CLI 模式
+func RunCLI() {
 	rt, err := NewRuntime()
 	if err != nil {
-		return nil, err
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
-	return &CLIServer{rt: rt}, nil
-}
-
-// Run 运行 CLI 交互循环
-func (s *CLIServer) Run() error {
 	ctx := context.Background()
 	scanner := bufio.NewScanner(os.Stdin)
-	sessionID := uuid.New().String()
-
-	ch := channel.NewCLIChannel(sessionID, scanner)
+	ch := channel.NewCLIChannel(uuid.New().String(), scanner)
 	defer ch.Close()
 
 	for {
-		_, _ = fmt.Fprint(os.Stdout, "👤: ")
+		fmt.Print("👤: ")
 		if !scanner.Scan() {
 			break
 		}
@@ -46,11 +34,8 @@ func (s *CLIServer) Run() error {
 			break
 		}
 
-		err := s.rt.Run(ctx, ch, line)
-		if err != nil {
-			return err
+		if err := rt.Run(ctx, ch, line); err != nil {
+			fmt.Fprintln(os.Stderr, err)
 		}
 	}
-
-	return scanner.Err()
 }

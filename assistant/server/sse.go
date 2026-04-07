@@ -1,80 +1,76 @@
 package server
 
 import (
+	"aimc-go/app/modules/core"
 	"aimc-go/assistant/approval"
 	"aimc-go/assistant/channel"
 	"aimc-go/assistant/runtime"
 	"context"
 	"embed"
-	"encoding/json"
-	"net/http"
-	"time"
+
+	"github.com/gin-gonic/gin"
 )
+
+var _ core.Module = (*SSEModule)(nil)
 
 //go:embed sse.html
 var staticFS embed.FS
 
-// SSEServer SSE 服务
-type SSEServer struct {
+type SSEModule struct {
 	rt  *runtime.Runtime
 	hub *channel.SSEHub
 }
 
-// NewSSEServer 创建 SSE 服务
-func NewSSEServer() (*SSEServer, error) {
+func NewSSE() (*SSEModule, error) {
 	rt, err := NewRuntime()
 	if err != nil {
 		return nil, err
 	}
 
-	return &SSEServer{
+	return &SSEModule{
 		rt:  rt,
 		hub: channel.NewSSEHub(),
 	}, nil
 }
 
-// ChatRequest 聊天请求
-type ChatRequest struct {
-	SessionID string `json:"session_id"`
-	Query     string `json:"query"`
+func (m *SSEModule) Routes(r *gin.RouterGroup) {
+	assistant := r.Group("/assistant")
+	assistant.GET("", m.ssePage)
+	assistant.POST("/chat", m.chat)
+	assistant.POST("/approval", m.approval)
 }
 
-// Chat SSE 聊天接口
-func (s *SSEServer) Chat(w http.ResponseWriter, r *http.Request) {
+func (m *SSEModule) chat(c *gin.Context) {
 	// 设置 SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+	var req struct {
+		SessionID string `json:"session_id"`
+		Query     string `json:"query"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithError(400, err)
 		return
 	}
 
-	var req ChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
 
-	ctx := r.Context()
-
-	ch, err := s.hub.Acquire(req.SessionID, w, flusher)
+	ch, err := m.hub.Acquire(req.SessionID, c.Writer, c.Writer)
 	if err != nil {
-		// 会话忙，返回 409 Conflict
-		http.Error(w, err.Error(), http.StatusConflict)
+		c.AbortWithError(409, err)
 		return
 	}
 
 	// 异步运行 runtime
 	go func() {
-		defer func() {
-			s.hub.Release(req.SessionID)
-			ch.Close()
-		}()
+		defer cancel()
+		defer ch.Close()
+		defer m.hub.Release(req.SessionID)
 
-		err := s.rt.Run(ctx, ch, req.Query)
+		err := m.rt.Run(ctx, ch, req.Query)
 		if err != nil {
 			ch.Write(channel.Chunk{
 				Type:    channel.TypeError,
@@ -83,23 +79,19 @@ func (s *SSEServer) Chat(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// 阻塞保持连接
+	// 阻塞保持连接（客户端断开或任务完成都会退出）
 	<-ctx.Done()
 }
 
-// ApprovalRequest 审批请求
-type ApprovalRequest struct {
-	SessionID  string `json:"session_id"`
-	ApprovalID string `json:"approval_id"`
-	Approved   bool   `json:"approved"`
-	Reason     string `json:"reason,omitempty"`
-}
-
-// Approval 审批回调接口
-func (s *SSEServer) Approval(w http.ResponseWriter, r *http.Request) {
-	var req ApprovalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+func (m *SSEModule) approval(c *gin.Context) {
+	var req struct {
+		SessionID  string `json:"session_id"`
+		ApprovalID string `json:"approval_id"`
+		Approved   bool   `json:"approved"`
+		Reason     string `json:"reason,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithError(400, err)
 		return
 	}
 
@@ -112,45 +104,20 @@ func (s *SSEServer) Approval(w http.ResponseWriter, r *http.Request) {
 		result.DisapproveReason = &req.Reason
 	}
 
-	err := s.hub.SubmitApproval(req.SessionID, result)
+	err := m.hub.SubmitApproval(req.SessionID, result)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		c.AbortWithError(404, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	c.JSON(200, gin.H{"status": "ok"})
 }
 
-// SSEPage 测试页面
-func (s *SSEServer) SSEPage(w http.ResponseWriter, r *http.Request) {
+func (m *SSEModule) ssePage(c *gin.Context) {
 	data, err := staticFS.ReadFile("sse.html")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.AbortWithError(500, err)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(data)
-}
-
-// Run 启动 SSE HTTP 服务
-func (s *SSEServer) Run(ctx context.Context, addr string) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.SSEPage)
-	mux.HandleFunc("/chat", s.Chat)
-	mux.HandleFunc("/approval", s.Approval)
-
-	server := &http.Server{
-		Addr:    addr,
-		Handler: mux,
-	}
-
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		server.Shutdown(shutdownCtx)
-	}()
-
-	return server.ListenAndServe()
+	c.Data(200, "text/html; charset=utf-8", data)
 }
