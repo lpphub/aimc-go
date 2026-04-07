@@ -19,7 +19,7 @@ func (r *Runtime) handleAgentEvent(ch *channel.Channel, event *adk.AgentEvent) (
 ) {
 	// 1. error
 	if event.Err != nil {
-		ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
+		ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
 		// ErrExceedMaxIterations 是可接受的终止，返回 nil 继续完成流程
 		if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
 			return nil, nil, nil
@@ -47,7 +47,7 @@ func (r *Runtime) handleAgentEvent(ch *channel.Channel, event *adk.AgentEvent) (
 			return nil, nil, fmt.Errorf("get tool_result error: %w", err)
 		}
 
-		ch.Emit(channel.Chunk{
+		ch.Write(channel.Chunk{
 			Type:    channel.TypeToolResult,
 			Content: fmt.Sprintf("✅ [tool result] -> %s: %s\n", mv.ToolName, r.truncate(result.Content, 200)),
 		})
@@ -69,12 +69,12 @@ func (r *Runtime) handleAgentEvent(ch *channel.Channel, event *adk.AgentEvent) (
 // handleAction 处理 interrupt/transfer/exit
 func (r *Runtime) handleAction(ch *channel.Channel, action *adk.AgentAction) *adk.InterruptInfo {
 	if action.Interrupted != nil {
-		ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: "⏸️ interrupted \n"})
+		ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "⏸️ interrupted \n"})
 		return action.Interrupted
 	}
 
 	if action.TransferToAgent != nil {
-		ch.Emit(channel.Chunk{
+		ch.Write(channel.Chunk{
 			Type:    channel.TypeMessage,
 			Content: fmt.Sprintf("➡️ transfer to %s\n", action.TransferToAgent.DestAgentName),
 		})
@@ -82,7 +82,7 @@ func (r *Runtime) handleAction(ch *channel.Channel, action *adk.AgentAction) *ad
 	}
 
 	if action.Exit {
-		ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: "🏁 exit\n"})
+		ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "🏁 exit\n"})
 	}
 
 	return nil
@@ -109,7 +109,7 @@ func (r *Runtime) handleStreaming(ch *channel.Channel, mv *adk.MessageVariant) (
 
 		if frame.Content != "" {
 			contentBuf.WriteString(frame.Content)
-			ch.Emit(channel.Chunk{Type: channel.TypeAssistant, Content: frame.Content})
+			ch.Write(channel.Chunk{Type: channel.TypeAssistant, Content: frame.Content})
 		}
 
 		if len(frame.ToolCalls) > 0 {
@@ -118,11 +118,11 @@ func (r *Runtime) handleStreaming(ch *channel.Channel, mv *adk.MessageVariant) (
 	}
 
 	// 换行
-	ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: "\n"})
+	ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "\n"})
 
 	// tool call 输出（展示）
 	for _, tc := range accumulatedToolCalls {
-		ch.Emit(channel.Chunk{
+		ch.Write(channel.Chunk{
 			Type:    channel.TypeToolCall,
 			Content: fmt.Sprintf("🔧 [tool call] -> %s: %s\n", tc.Function.Name, r.truncate(tc.Function.Arguments, 200)),
 		})
@@ -143,10 +143,10 @@ func (r *Runtime) handleNonStreaming(ch *channel.Channel, mv *adk.MessageVariant
 	}
 
 	// 输出展示
-	ch.Emit(channel.Chunk{Type: channel.TypeAssistant, Content: mv.Message.Content})
+	ch.Write(channel.Chunk{Type: channel.TypeAssistant, Content: mv.Message.Content})
 
 	for _, tc := range mv.Message.ToolCalls {
-		ch.Emit(channel.Chunk{
+		ch.Write(channel.Chunk{
 			Type:    channel.TypeToolCall,
 			Content: fmt.Sprintf("\n🔧 [tool call] -> %s: %s\n", tc.Function.Name, r.truncate(tc.Function.Arguments, 200)),
 		})
@@ -159,7 +159,7 @@ func (r *Runtime) handleNonStreaming(ch *channel.Channel, mv *adk.MessageVariant
 func (r *Runtime) processEvents(ctx context.Context, ch *channel.Channel, iter *adk.AsyncIterator[*adk.AgentEvent]) (
 	[]*schema.Message, *adk.InterruptInfo, error,
 ) {
-	ch.Emit(channel.Chunk{Type: channel.TypeMessage, Content: "🤖: "})
+	ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "🤖: "})
 
 	messages := make([]*schema.Message, 0, 20)
 

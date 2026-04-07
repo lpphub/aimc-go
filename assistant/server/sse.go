@@ -69,12 +69,14 @@ func (s *SSEServer) Chat(w http.ResponseWriter, r *http.Request) {
 
 	// 异步运行 runtime
 	go func() {
-		defer s.hub.Release(req.SessionID)
-		defer ch.Close()
+		defer func() {
+			s.hub.Release(req.SessionID)
+			ch.Close()
+		}()
 
 		err := s.rt.Run(ctx, ch, req.Query)
 		if err != nil {
-			ch.Emit(channel.Chunk{
+			ch.Write(channel.Chunk{
 				Type:    channel.TypeError,
 				Content: err.Error(),
 			})

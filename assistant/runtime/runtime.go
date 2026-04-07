@@ -14,7 +14,7 @@ import (
 
 // Runtime 服务层核心，管理完整的对话生命周期
 type Runtime struct {
-	agent           adk.Agent
+	runner          *adk.Runner
 	store           store.Store
 	checkpointStore adk.CheckPointStore
 }
@@ -39,7 +39,6 @@ func WithCheckpointStore(cs adk.CheckPointStore) RuntimeOption {
 // New 创建 Runtime
 func New(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
 	r := &Runtime{
-		agent:           agent,
 		checkpointStore: adkstore.NewInMemoryStore(), // 默认内存 checkpoint
 	}
 
@@ -50,6 +49,13 @@ func New(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
 	if r.store == nil {
 		return nil, fmt.Errorf("store is required, use WithStore() to set")
 	}
+
+	// 创建 Runner
+	r.runner = adk.NewRunner(context.Background(), adk.RunnerConfig{
+		Agent:           agent,
+		EnableStreaming: true,
+		CheckPointStore: r.checkpointStore,
+	})
 
 	return r, nil
 }
@@ -68,13 +74,7 @@ func (r *Runtime) Run(ctx context.Context, ch *channel.Channel, query string) er
 	}
 
 	// 3. 运行 agent，获取事件流
-	innerRunner := adk.NewRunner(ctx, adk.RunnerConfig{
-		Agent:           r.agent,
-		EnableStreaming: true,
-		CheckPointStore: r.checkpointStore,
-	})
-
-	iter := innerRunner.Run(ctx, sessHistory.Messages, adk.WithCheckPointID(ch.ID))
+	iter := r.runner.Run(ctx, sessHistory.Messages, adk.WithCheckPointID(ch.ID))
 
 	// 4. 处理事件流
 	messages, interruptInfo, err := r.processEvents(ctx, ch, iter)
@@ -95,7 +95,7 @@ func (r *Runtime) Run(ctx context.Context, ch *channel.Channel, query string) er
 	}
 
 	// 7. 发送完成信号
-	ch.Emit(channel.Chunk{Type: channel.TypeDone})
+	ch.Write(channel.Chunk{Type: channel.TypeDone})
 
 	return nil
 }
@@ -114,7 +114,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 			return fmt.Errorf("unexpected interrupt info type: %T", ic.Info)
 		}
 
-		ch.Emit(channel.Chunk{
+		ch.Write(channel.Chunk{
 			Type:    channel.TypeApproval,
 			Content: info.String(),
 			Meta:    map[string]any{"approval_id": approvalID, "tool_name": info.ToolName},
@@ -142,9 +142,9 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 
 		// 发送审批结果通知
 		if result.Approved {
-			ch.Emit(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
+			ch.Write(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
 		} else {
-			ch.Emit(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✖️ Rejected\n"})
+			ch.Write(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✖️ Rejected\n"})
 		}
 
 		// 恢复执行
@@ -169,7 +169,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 	}
 
 	// 发送完成信号
-	ch.Emit(channel.Chunk{Type: channel.TypeDone})
+	ch.Write(channel.Chunk{Type: channel.TypeDone})
 
 	return nil
 }
@@ -178,13 +178,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 func (r *Runtime) Resume(ctx context.Context, ch *channel.Channel, checkpointID string, resumeData map[string]any) (
 	[]*schema.Message, *adk.InterruptInfo, error,
 ) {
-	innerRunner := adk.NewRunner(ctx, adk.RunnerConfig{
-		Agent:           r.agent,
-		EnableStreaming: true,
-		CheckPointStore: r.checkpointStore,
-	})
-
-	events, err := innerRunner.ResumeWithParams(ctx, checkpointID, &adk.ResumeParams{
+	events, err := r.runner.ResumeWithParams(ctx, checkpointID, &adk.ResumeParams{
 		Targets: resumeData,
 	})
 	if err != nil {

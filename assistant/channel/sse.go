@@ -2,36 +2,10 @@ package channel
 
 import (
 	"aimc-go/assistant/approval"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
 )
-
-// SSESink SSE 推送
-type SSESink struct {
-	w       http.ResponseWriter
-	flusher http.Flusher
-}
-
-func NewSSESink(w http.ResponseWriter, flusher http.Flusher) Sink {
-	return &SSESink{
-		w:       w,
-		flusher: flusher,
-	}
-}
-
-func (s *SSESink) Emit(c Chunk) {
-	data, err := json.Marshal(c)
-	if err != nil {
-		data, _ = json.Marshal(Chunk{
-			Type:    TypeError,
-			Content: err.Error(),
-		})
-	}
-	fmt.Fprintf(s.w, "data: %s\n\n", data)
-	s.flusher.Flush()
-}
 
 // SSEHub 管理 SSE 场景的 Channel
 type SSEHub struct {
@@ -54,7 +28,7 @@ func (h *SSEHub) Acquire(sessionID string, w http.ResponseWriter, flusher http.F
 		return nil, fmt.Errorf("session %s is busy", sessionID)
 	}
 
-	ch := NewChannel(sessionID, NewSSESink(w, flusher))
+	ch := NewChannel(sessionID, NewSSEWriter(w, flusher))
 	h.channels[sessionID] = ch
 	return ch, nil
 }

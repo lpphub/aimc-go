@@ -22,7 +22,7 @@ type InputEvent struct {
 // Channel 双向交互通道
 type Channel struct {
 	ID      string
-	Sink    Sink
+	Writer  Writer                                         // agent 输出
 	Input   chan InputEvent                                // SSE 场景：channel 输入
 	OnInput func(ctx context.Context) (*InputEvent, error) // CLI 场景：阻塞回调
 
@@ -30,11 +30,11 @@ type Channel struct {
 }
 
 // NewChannel 创建 Channel
-func NewChannel(sessionID string, sink Sink) *Channel {
+func NewChannel(sessionID string, writer Writer) *Channel {
 	return &Channel{
-		ID:    sessionID,
-		Sink:  sink,
-		Input: make(chan InputEvent, 1),
+		ID:     sessionID,
+		Writer: writer,
+		Input:  make(chan InputEvent, 1),
 	}
 }
 
@@ -52,10 +52,10 @@ func (c *Channel) WaitInput(ctx context.Context) (*InputEvent, error) {
 	}
 }
 
-// Emit 输出 Chunk
-func (c *Channel) Emit(chunk Chunk) {
-	if c.Sink != nil {
-		c.Sink.Emit(chunk)
+// Write 输出 Chunk
+func (c *Channel) Write(chunk Chunk) {
+	if c.Writer != nil {
+		c.Writer.Write(chunk)
 	}
 }
 
