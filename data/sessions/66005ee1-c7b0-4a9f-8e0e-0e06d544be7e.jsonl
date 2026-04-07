@@ -1,3 +1,0 @@
-{"created_at":"2026-04-07T03:39:55.123576Z","id":"66005ee1-c7b0-4a9f-8e0e-0e06d544be7e","type":"session"}
-{"role":"user","content":"你是谁"}
-{"role":"assistant","content":"我是一个专门帮助用户学习和使用 Eino 框架的助手。\n\nEino 是一个用于构建 LLM（大语言模型）应用的 Go 框架。我可以帮助你：\n\n- **了解 Eino 框架**：整体架构、核心概念和入门指南\n- **组件选择和配置**：ChatModel、Embedding、Retriever、Indexer、Tool 等各种组件的使用\n- **编排和组合**：使用 Graph、Chain、Workflow 构建多步骤应用流程\n- **Agent 开发**：构建 AI Agent、配置 ReAct 模式、使用中间件、实现人机交互等\n\n无论你是刚接触 Eino 还是有具体的开发需求，我都可以提供帮助。你想了解哪方面的内容？"}
