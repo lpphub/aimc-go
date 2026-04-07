@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE 连接测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #f0f2f5;
+        }
+        .header {
+            background: #fff;
+            padding: 12px 20px;
+            border-bottom: 1px solid #e8e8e8;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header-left { display: flex; align-items: baseline; gap: 12px; }
+        .header h1 { font-size: 18px; color: #333; }
+        .session-id {
+            font-size: 12px;
+            color: #999;
+            background: #f6f6f6;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .status.connected { background: #e6f7e6; color: #52c41a; }
+        .status.disconnected { background: #fff1f0; color: #ff4d4f; }
+        .status.busy { background: #fffbe6; color: #faad14; }
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .message {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+        .message.user {
+            align-self: flex-end;
+            background: #1890ff;
+            color: #fff;
+        }
+        .message.assistant {
+            align-self: flex-start;
+            background: #fff;
+            color: #333;
+            border: 1px solid #e8e8e8;
+        }
+        .message.assistant pre {
+            background: #f6f6f6;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .message.assistant code {
+            background: #f6f6f6;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        .message.assistant pre code {
+            background: none;
+            padding: 0;
+        }
+        .message.assistant ul, .message.assistant ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+        .message.assistant p {
+            margin: 8px 0;
+        }
+        .message.assistant p:first-child { margin-top: 0; }
+        .message.assistant p:last-child { margin-bottom: 0; }
+        .message.tool {
+            align-self: flex-start;
+            background: #f6f6f6;
+            color: #666;
+            border: 1px solid #e8e8e8;
+            font-size: 13px;
+        }
+        .message.error {
+            align-self: flex-start;
+            background: #fff1f0;
+            color: #ff4d4f;
+            border: 1px solid #ffa39e;
+        }
+        .message.approval {
+            align-self: flex-start;
+            background: #fffbe6;
+            color: #8c8c8c;
+            border: 1px solid #ffe58f;
+        }
+        .message .label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 4px;
+        }
+        .message pre {
+            background: #f6f6f6;
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        .input-area {
+            background: #fff;
+            padding: 16px 20px;
+            border-top: 1px solid #e8e8e8;
+        }
+        .input-row {
+            display: flex;
+            gap: 12px;
+        }
+        .input-row textarea {
+            flex: 1;
+            border: 1px solid #d9d9d9;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 14px;
+            resize: none;
+            height: 60px;
+            outline: none;
+        }
+        .input-row textarea:focus { border-color: #40a9ff; }
+        .input-row button {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            background: #1890ff;
+            color: #fff;
+        }
+        .input-row button:hover { background: #40a9ff; }
+        .input-row button:disabled { background: #d9d9d9; cursor: not-allowed; }
+        .approval-popup {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            background: #fff;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 16px;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+        }
+        .approval-popup.active { display: block; }
+        .approval-popup h3 { font-size: 14px; color: #856404; margin-bottom: 12px; }
+        .approval-popup pre { background: #f6f6f6; padding: 8px; border-radius: 4px; margin: 12px 0; }
+        .approval-popup input {
+            width: 100%;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 12px;
+        }
+        .approval-popup .actions { display: flex; gap: 8px; }
+        .approval-popup .actions button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .approval-popup .actions .approve { background: #52c41a; color: #fff; }
+        .approval-popup .actions .reject { background: #ff4d4f; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <h1>SSE 连接测试</h1>
+            <div class="session-id" id="sessionIdDisplay"></div>
+        </div>
+        <div class="status disconnected" id="status">未连接</div>
+    </div>
+
+    <div class="chat-container" id="chatContainer"></div>
+
+    <div class="input-area">
+        <div class="input-row">
+            <textarea id="queryInput" placeholder="输入消息..."></textarea>
+            <button id="sendBtn">发送</button>
+        </div>
+    </div>
+
+    <div class="approval-popup" id="approvalPopup">
+        <h3>审批请求</h3>
+        <div id="approvalTool"></div>
+        <pre id="approvalArgs"></pre>
+        <input type="text" id="approvalReason" placeholder="拒绝原因（可选）">
+        <div class="actions">
+            <button class="approve" id="approveBtn">批准</button>
+            <button class="reject" id="rejectBtn">拒绝</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        const sessionId = generateUUID();
+        let pendingApproval = null;
+        let currentAssistantEl = null;
+        let currentAssistantText = '';
+
+        document.getElementById('sessionIdDisplay').textContent = `Session: ${sessionId}`;
+
+        const chatContainer = document.getElementById('chatContainer');
+        const queryInput = document.getElementById('queryInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const statusEl = document.getElementById('status');
+        const approvalPopup = document.getElementById('approvalPopup');
+        const approvalTool = document.getElementById('approvalTool');
+        const approvalArgs = document.getElementById('approvalArgs');
+        const approvalReason = document.getElementById('approvalReason');
+
+        function addMessage(type, content) {
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+
+            if (type === 'tool') {
+                const label = document.createElement('div');
+                label.className = 'label';
+                label.textContent = content.startsWith('工具调用') ? '🔧 工具调用' : '📋 工具结果';
+                msg.appendChild(label);
+                const text = document.createElement('div');
+                text.textContent = content.replace(/^(工具调用: |工具结果: )/, '');
+                msg.appendChild(text);
+            } else if (type === 'approval') {
+                msg.innerHTML = `<div class="label">⚠️ 审批请求</div><div>${content}</div>`;
+            } else {
+                msg.textContent = content;
+            }
+
+            chatContainer.appendChild(msg);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return msg;
+        }
+
+        function setStatus(text, state) {
+            statusEl.textContent = text;
+            statusEl.className = `status ${state}`;
+        }
+
+        function sendQuery() {
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            addMessage('user', query);
+            queryInput.value = '';
+            sendBtn.disabled = true;
+            currentAssistantEl = null;
+            currentAssistantText = '';
+
+            fetch(`${API_BASE}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionId, query: query })
+            }).then(resp => {
+                if (resp.status === 409) {
+                    addMessage('error', '会话正忙，请等待当前请求完成');
+                    sendBtn.disabled = false;
+                    return;
+                }
+                if (!resp.ok) {
+                    addMessage('error', `HTTP 错误: ${resp.status}`);
+                    sendBtn.disabled = false;
+                    return;
+                }
+
+                setStatus('已连接', 'connected');
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+
+                function read() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            setStatus('可发送新消息', 'connected');
+                            sendBtn.disabled = false;
+                            currentAssistantEl = null;
+                            currentAssistantText = '';
+                            return;
+                        }
+
+                        const text = decoder.decode(value);
+                        const lines = text.split('\n');
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    handleMessage(data);
+                                } catch (e) {}
+                            }
+                        }
+                        read();
+                    });
+                }
+                read();
+            }).catch(err => {
+                addMessage('error', `请求失败: ${err.message}`);
+                setStatus('未连接', 'disconnected');
+                sendBtn.disabled = false;
+            });
+        }
+
+        function handleMessage(data) {
+            const type = data.type || '';
+            const content = data.content || '';
+
+            switch (type) {
+                case 'assistant':
+                    currentAssistantText += content;
+                    if (!currentAssistantEl) {
+                        currentAssistantEl = addMessage('assistant', '');
+                    }
+                    currentAssistantEl.innerHTML = marked.parse(currentAssistantText);
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    break;
+                case 'tool_call':
+                    currentAssistantEl = null;
+                    currentAssistantText = '';
+                    addMessage('tool', `工具调用: ${content}`);
+                    break;
+                case 'tool_result':
+                    addMessage('tool', `工具结果: ${content}`);
+                    break;
+                case 'approval':
+                    currentAssistantEl = null;
+                    currentAssistantText = '';
+                    const meta = data.meta || {};
+                    pendingApproval = {
+                        approval_id: meta.approval_id,
+                        tool_name: meta.tool_name
+                    };
+                    approvalTool.textContent = `工具: ${meta.tool_name || ''}`;
+                    // content 格式: "⚠️ Approval Required\nTool: xxx\nArguments: {...}"
+                    const argsMatch = content.match(/Arguments: (.+)/s);
+                    if (argsMatch) {
+                        try {
+                            const argsObj = JSON.parse(argsMatch[1]);
+                            approvalArgs.textContent = JSON.stringify(argsObj, null, 2);
+                        } catch (e) {
+                            approvalArgs.textContent = argsMatch[1];
+                        }
+                    } else {
+                        approvalArgs.textContent = content;
+                    }
+                    approvalPopup.classList.add('active');
+                    break;
+                case 'error':
+                    currentAssistantEl = null;
+                    currentAssistantText = '';
+                    addMessage('error', content);
+                    break;
+                case 'done':
+                    currentAssistantEl = null;
+                    currentAssistantText = '';
+                    sendBtn.disabled = false;
+                    break;
+            }
+        }
+
+        function submitApproval(approved) {
+            if (!pendingApproval) return;
+
+            fetch(`${API_BASE}/approval`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    approval_id: pendingApproval.approval_id,
+                    approved: approved,
+                    reason: approvalReason.value.trim()
+                })
+            }).then(() => {
+                approvalPopup.classList.remove('active');
+                approvalReason.value = '';
+                pendingApproval = null;
+            });
+        }
+
+        sendBtn.addEventListener('click', sendQuery);
+        document.getElementById('approveBtn').addEventListener('click', () => submitApproval(true));
+        document.getElementById('rejectBtn').addEventListener('click', () => submitApproval(false));
+
+        queryInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !sendBtn.disabled) {
+                e.preventDefault();
+                sendQuery();
+            }
+        });
+
+        // 自动连接
+        setStatus('已就绪', 'connected');
+    </script>
+</body>
+</html>

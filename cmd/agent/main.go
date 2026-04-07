@@ -1,11 +1,8 @@
 package main
 
-import (
-	"aimc-go/assistant"
-)
+import "aimc-go/assistant"
 
 func main() {
 	assistant.RunCLI()
-
-	//agent.DeepAgent()
+	//assistant.RunSSE(":8080")
 }

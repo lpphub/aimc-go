@@ -4,9 +4,15 @@ import (
 	"aimc-go/assistant/approval"
 	"aimc-go/assistant/channel"
 	"aimc-go/assistant/runtime"
+	"context"
+	"embed"
 	"encoding/json"
 	"net/http"
+	"time"
 )
+
+//go:embed sse.html
+var staticFS embed.FS
 
 // SSEServer SSE 服务
 type SSEServer struct {
@@ -112,4 +118,37 @@ func (s *SSEServer) Approval(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// SSEPage 测试页面
+func (s *SSEServer) SSEPage(w http.ResponseWriter, r *http.Request) {
+	data, err := staticFS.ReadFile("sse.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
+}
+
+// Run 启动 SSE HTTP 服务
+func (s *SSEServer) Run(ctx context.Context, addr string) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.SSEPage)
+	mux.HandleFunc("/chat", s.Chat)
+	mux.HandleFunc("/approval", s.Approval)
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Shutdown(shutdownCtx)
+	}()
+
+	return server.ListenAndServe()
 }

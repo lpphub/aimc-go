@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // CLIServer CLI 服务
@@ -29,7 +31,7 @@ func NewCLIServer() (*CLIServer, error) {
 func (s *CLIServer) Run() error {
 	ctx := context.Background()
 	scanner := bufio.NewScanner(os.Stdin)
-	sessionID := "e286e377-b3b1-4b59-86de-1e3f5d34fb55"
+	sessionID := uuid.New().String()
 
 	ch := channel.NewCLIChannel(sessionID, scanner)
 	defer ch.Close()

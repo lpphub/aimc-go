@@ -21,9 +21,9 @@ const (
 
 // Chunk 输出片段
 type Chunk struct {
-	Type    ChunkType
-	Content string
-	Meta    map[string]any
+	Type    ChunkType       `json:"type"`
+	Content string          `json:"content"`
+	Meta    map[string]any  `json:"meta,omitempty"`
 }
 
 // Sink 实时输出展示接口
