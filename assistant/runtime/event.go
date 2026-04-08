@@ -2,76 +2,46 @@ package runtime
 
 import (
 	"aimc-go/assistant/channel"
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 )
 
-// handleAgentEvent 处理单个 agent 事件，返回新产生的消息
-func (r *Runtime) handleAgentEvent(ch *channel.Channel, event *adk.AgentEvent) (
-	*schema.Message, *adk.InterruptInfo, error,
-) {
-	// 1. error
+// EventHandler 处理 adk.AgentEvent 并写入 channel.Channel（无状态）
+type EventHandler struct{}
+
+// HandleEvent 处理单个事件，返回：(产生的消息, 中断信息, 错误)
+func (h *EventHandler) HandleEvent(event *adk.AgentEvent, ch *channel.Channel) (*schema.Message, *adk.InterruptInfo, error) {
+	// 1. 错误
 	if event.Err != nil {
 		_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
-		// ErrExceedMaxIterations 是可接受的终止，返回 nil 继续完成流程
 		if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
 			return nil, nil, nil
 		}
-		// 其他错误需要中断
 		return nil, nil, event.Err
 	}
 
-	// 2. action
+	// 2. 动作
 	if event.Action != nil {
-		return nil, r.handleAction(ch, event.Action), nil
+		return nil, h.handleAction(event.Action, ch), nil
 	}
 
-	// 3. message
+	// 3. 消息
 	if event.Output == nil || event.Output.MessageOutput == nil {
 		return nil, nil, nil
 	}
 
-	mv := event.Output.MessageOutput
-
-	// tool result
-	if mv.Role == schema.Tool {
-		result, err := mv.GetMessage()
-		if err != nil {
-			return nil, nil, fmt.Errorf("get tool_result error: %w", err)
-		}
-
-		_ = ch.Write(channel.Chunk{
-			Type:    channel.TypeToolResult,
-			Content: fmt.Sprintf("✅ [tool result] -> %s: %s\n", mv.ToolName, r.truncate(result.Content, 200)),
-		})
-		return result, nil, nil
-	}
-
-	// 只处理 assistant
-	if mv.Role != schema.Assistant && mv.Role != "" {
-		return nil, nil, nil
-	}
-
-	if mv.IsStreaming {
-		msg, err := r.handleStreaming(ch, mv)
-		return msg, nil, err
-	}
-	return r.handleNonStreaming(ch, mv), nil, nil
+	return h.handleMessage(event.Output.MessageOutput, ch)
 }
 
-// handleAction 处理 interrupt/transfer/exit
-func (r *Runtime) handleAction(ch *channel.Channel, action *adk.AgentAction) *adk.InterruptInfo {
+func (h *EventHandler) handleAction(action *adk.AgentAction, ch *channel.Channel) *adk.InterruptInfo {
 	if action.Interrupted != nil {
 		return action.Interrupted
 	}
-
 	if action.TransferToAgent != nil {
 		_ = ch.Write(channel.Chunk{
 			Type:    channel.TypeMessage,
@@ -79,20 +49,44 @@ func (r *Runtime) handleAction(ch *channel.Channel, action *adk.AgentAction) *ad
 		})
 		return nil
 	}
-
 	if action.Exit {
 		_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "🏁 exit\n"})
 	}
-
 	return nil
 }
 
-// handleStreaming 处理流式消息，返回完整消息
-func (r *Runtime) handleStreaming(ch *channel.Channel, mv *adk.MessageVariant) (*schema.Message, error) {
+func (h *EventHandler) handleMessage(mv *adk.MessageVariant, ch *channel.Channel) (*schema.Message, *adk.InterruptInfo, error) {
+	// Tool 结果
+	if mv.Role == schema.Tool {
+		result, err := mv.GetMessage()
+		if err != nil {
+			return nil, nil, err
+		}
+		_ = ch.Write(channel.Chunk{
+			Type:    channel.TypeToolResult,
+			Content: fmt.Sprintf("✅ [tool result] -> %s\n", mv.ToolName),
+		})
+		return result, nil, nil
+	}
+
+	// Assistant
+	if mv.Role != schema.Assistant && mv.Role != "" {
+		return nil, nil, nil
+	}
+
+	if mv.IsStreaming {
+		msg, err := h.handleStreaming(mv, ch)
+		return msg, nil, err
+	}
+	msg := h.handleNonStreaming(mv, ch)
+	return msg, nil, nil
+}
+
+func (h *EventHandler) handleStreaming(mv *adk.MessageVariant, ch *channel.Channel) (*schema.Message, error) {
 	mv.MessageStream.SetAutomaticClose()
 
 	var contentBuf strings.Builder
-	var accumulatedToolCalls []schema.ToolCall
+	var toolCalls []schema.ToolCall
 
 	for {
 		frame, err := mv.MessageStream.Recv()
@@ -109,90 +103,64 @@ func (r *Runtime) handleStreaming(ch *channel.Channel, mv *adk.MessageVariant) (
 		if frame.Content != "" {
 			contentBuf.WriteString(frame.Content)
 			if err := ch.Write(channel.Chunk{Type: channel.TypeAssistant, Content: frame.Content}); err != nil {
-				return nil, err // 连接断开，停止流式输出
+				return nil, err
 			}
 		}
-
 		if len(frame.ToolCalls) > 0 {
-			accumulatedToolCalls = append(accumulatedToolCalls, frame.ToolCalls...)
+			toolCalls = append(toolCalls, frame.ToolCalls...)
 		}
 	}
 
-	// 换行
 	_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "\n"})
 
-	// tool call 输出（展示）
-	for _, tc := range accumulatedToolCalls {
+	for _, tc := range toolCalls {
 		_ = ch.Write(channel.Chunk{
 			Type:    channel.TypeToolCall,
-			Content: fmt.Sprintf("🔧 [tool call] -> %s: %s\n", tc.Function.Name, r.truncate(tc.Function.Arguments, 200)),
+			Content: fmt.Sprintf("🔧 [tool call] -> %s\n", tc.Function.Name),
 		})
 	}
 
-	// 返回完整的 assistant 消息（content + ToolCalls）
 	return &schema.Message{
 		Role:      schema.Assistant,
 		Content:   contentBuf.String(),
-		ToolCalls: accumulatedToolCalls,
+		ToolCalls: toolCalls,
 	}, nil
 }
 
-// handleNonStreaming 处理非流式消息，返回消息
-func (r *Runtime) handleNonStreaming(ch *channel.Channel, mv *adk.MessageVariant) *schema.Message {
+func (h *EventHandler) handleNonStreaming(mv *adk.MessageVariant, ch *channel.Channel) *schema.Message {
 	if mv.Message == nil {
 		return nil
 	}
-
-	// 输出展示
 	_ = ch.Write(channel.Chunk{Type: channel.TypeAssistant, Content: mv.Message.Content})
 
 	for _, tc := range mv.Message.ToolCalls {
 		_ = ch.Write(channel.Chunk{
 			Type:    channel.TypeToolCall,
-			Content: fmt.Sprintf("\n🔧 [tool call] -> %s: %s\n", tc.Function.Name, r.truncate(tc.Function.Arguments, 200)),
+			Content: fmt.Sprintf("\n🔧 [tool call] -> %s\n", tc.Function.Name),
 		})
 	}
-
 	return mv.Message
 }
 
-// processEvents 迭代处理事件流，本地收集消息
-func (r *Runtime) processEvents(ctx context.Context, ch *channel.Channel, iter *adk.AsyncIterator[*adk.AgentEvent]) (
-	[]*schema.Message, *adk.InterruptInfo, error,
-) {
-	_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "🤖: "})
-
+// Drain 消费事件迭代器并处理
+func (h *EventHandler) Drain(iter *adk.AsyncIterator[*adk.AgentEvent], ch *channel.Channel) ([]*schema.Message, *adk.InterruptInfo, error) {
 	messages := make([]*schema.Message, 0, 20)
 
 	for {
 		event, ok := iter.Next()
 		if !ok {
-			return messages, nil, nil // 迭代结束，返回收集的消息
+			return messages, nil, nil
 		}
 
-		// 检查 ctx 是否已取消
-		if ctx.Err() != nil {
-			return nil, nil, ctx.Err()
-		}
-
-		msg, interruptInfo, err := r.handleAgentEvent(ch, event)
+		msg, interrupt, err := h.HandleEvent(event, ch)
 		if err != nil {
 			return nil, nil, err
 		}
 		if msg != nil {
 			messages = append(messages, msg)
 		}
-		if interruptInfo != nil {
-			return messages, interruptInfo, nil
+		if interrupt != nil {
+			return messages, interrupt, nil
 		}
 	}
-}
-
-// truncate 截断字符串，按 rune 截断避免破坏多字节字符
-func (r *Runtime) truncate(s string, maxLen int) string {
-	if utf8.RuneCountInString(s) <= maxLen {
-		return s
-	}
-	runes := []rune(s)
-	return string(runes[:maxLen]) + "..."
 }

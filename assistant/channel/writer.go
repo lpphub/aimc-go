@@ -3,7 +3,6 @@ package channel
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 )
@@ -80,20 +79,14 @@ func NewSSEWriter(ctx context.Context, w http.ResponseWriter, flusher http.Flush
 }
 
 func (s *SSEWriter) Write(c Chunk) error {
-	// 快速检测：context 已取消
-	if s.ctx != nil {
-		if err := s.ctx.Err(); err != nil {
-			return err
-		}
+	// context 取消就不再输出
+	if s.ctx != nil && s.ctx.Err() != nil {
+		return s.ctx.Err()
 	}
 
 	// 过滤 tool_call 和 tool_result 类型
 	if c.Type == TypeToolCall || c.Type == TypeToolResult {
 		return nil
-	}
-
-	if s.flusher == nil {
-		return errors.New("flusher is nil")
 	}
 
 	data, err := json.Marshal(c)
@@ -104,6 +97,10 @@ func (s *SSEWriter) Write(c Chunk) error {
 	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", data); err != nil {
 		return err
 	}
-	s.flusher.Flush()
+
+	// flusher 存在才 flush
+	if s.flusher != nil {
+		s.flusher.Flush()
+	}
 	return nil
 }

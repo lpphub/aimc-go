@@ -17,6 +17,7 @@ type Runtime struct {
 	runner          *adk.Runner
 	store           store.Store
 	checkpointStore adk.CheckPointStore
+	handler         EventHandler // 事件处理器（无状态）
 }
 
 // RuntimeOption Runtime 配置选项
@@ -29,16 +30,10 @@ func WithStore(s store.Store) RuntimeOption {
 	}
 }
 
-// WithCheckpointStore 设置 checkpoint 存储
-func WithCheckpointStore(cs adk.CheckPointStore) RuntimeOption {
-	return func(r *Runtime) {
-		r.checkpointStore = cs
-	}
-}
-
 // New 创建 Runtime
 func New(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
 	r := &Runtime{
+		handler:         EventHandler{},
 		checkpointStore: adkstore.NewInMemoryStore(), // 默认内存 checkpoint
 	}
 
@@ -60,24 +55,67 @@ func New(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
 	return r, nil
 }
 
-// Run 执行一轮对话
+// Generate 执行对话，返回事件迭代器（原始 API）
+// 用法：
+//
+//	iter := rt.Generate(ctx, messages, checkpointID)
+//	for {
+//	    event, ok := iter.Next()
+//	    if !ok { break }
+//	    // 处理 event.Err / event.Action / event.Output
+//	}
+func (r *Runtime) Generate(ctx context.Context, messages []*schema.Message, checkpointID string) *adk.AsyncIterator[*adk.AgentEvent] {
+	return r.runner.Run(ctx, messages, adk.WithCheckPointID(checkpointID))
+}
+
+// Events 执行对话，返回事件 channel（便利 API）
+// 用法：
+//
+//	for event := range rt.Events(ctx, messages, checkpointID) {
+//	    if event.Err != nil { ... }
+//	    if event.Output != nil { ... }
+//	}
+func (r *Runtime) Events(ctx context.Context, messages []*schema.Message, checkpointID string) <-chan *adk.AgentEvent {
+	out := make(chan *adk.AgentEvent, 32)
+
+	go func() {
+		defer close(out)
+		iter := r.Generate(ctx, messages, checkpointID)
+
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			event, ok := iter.Next()
+			if !ok {
+				return
+			}
+			out <- event
+		}
+	}()
+
+	return out
+}
+
+// Run 执行一轮对话（完整流程）
 func (r *Runtime) Run(ctx context.Context, ch *channel.Channel, query string) error {
 	// 1. 存储用户消息
 	if err := r.store.Append(ctx, ch.ID, schema.UserMessage(query)); err != nil {
 		return fmt.Errorf("append user message: %w", err)
 	}
 
-	// 2. 获取历史消息（从 store）
+	// 2. 获取历史消息
 	sessHistory, err := r.store.GetOrCreate(ctx, ch.ID)
 	if err != nil {
 		return fmt.Errorf("get session history: %w", err)
 	}
 
-	// 3. 运行 agent，获取事件流
-	iter := r.runner.Run(ctx, sessHistory.Messages, adk.WithCheckPointID(ch.ID))
+	// 3. 运行 agent
+	_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "🤖: "})
+	iter := r.Generate(ctx, sessHistory.Messages, ch.ID)
 
 	// 4. 处理事件流
-	messages, interruptInfo, err := r.processEvents(ctx, ch, iter)
+	messages, interruptInfo, err := r.handler.Drain(iter, ch)
 	if err != nil {
 		return fmt.Errorf("process events: %w", err)
 	}
@@ -111,7 +149,7 @@ func (r *Runtime) Resume(ctx context.Context, ch *channel.Channel, checkpointID 
 		return nil, nil, fmt.Errorf("resume with params: %w", err)
 	}
 
-	return r.processEvents(ctx, ch, events)
+	return r.handler.Drain(events, ch)
 }
 
 // handleInterrupt 处理中断（审批）
