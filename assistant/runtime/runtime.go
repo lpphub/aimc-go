@@ -95,7 +95,7 @@ func (r *Runtime) Run(ctx context.Context, ch *channel.Channel, query string) er
 	}
 
 	// 7. 发送完成信号
-	ch.Write(channel.Chunk{Type: channel.TypeDone})
+	_ = ch.Write(channel.Chunk{Type: channel.TypeDone})
 
 	return nil
 }
@@ -128,7 +128,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 			return fmt.Errorf("unexpected interrupt info type: %T", ic.Info)
 		}
 
-		ch.Write(channel.Chunk{
+		_ = ch.Write(channel.Chunk{
 			Type:    channel.TypeApproval,
 			Content: info.String(),
 			Meta:    map[string]any{"approval_id": approvalID, "tool_name": info.ToolName},
@@ -156,9 +156,9 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 
 		// 发送审批结果通知
 		if result.Approved {
-			ch.Write(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
+			_ = ch.Write(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
 		} else {
-			ch.Write(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✖️ Rejected\n"})
+			_ = ch.Write(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✖️ Rejected\n"})
 		}
 
 		// 恢复执行
@@ -183,7 +183,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 	}
 
 	// 发送完成信号
-	ch.Write(channel.Chunk{Type: channel.TypeDone})
+	_ = ch.Write(channel.Chunk{Type: channel.TypeDone})
 
 	return nil
 }

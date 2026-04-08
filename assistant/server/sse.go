@@ -7,6 +7,8 @@ import (
 	"aimc-go/assistant/runtime"
 	"context"
 	"embed"
+	"errors"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -55,10 +57,16 @@ func (m *SSEModule) chat(c *gin.Context) {
 		return
 	}
 
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.AbortWithError(500, errors.New("streaming unsupported"))
+		return
+	}
+
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
 
-	ch, err := m.hub.Acquire(req.SessionID, c.Writer, c.Writer)
+	ch, err := m.hub.Acquire(ctx, req.SessionID, c.Writer, flusher)
 	if err != nil {
 		c.AbortWithError(409, err)
 		return

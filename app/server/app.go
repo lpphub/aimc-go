@@ -68,10 +68,7 @@ func (a *App) registerModules() []core.Module {
 	userMod := user.New(infra.DB)
 	authMod := auth.New(userMod.Service)
 	postMod := post.New(infra.DB)
-	assistantMod, err := server.NewSSE()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to init assistant module: %v", err))
-	}
+	assistantMod, _ := server.NewSSE()
 
 	registry.Register(userMod, authMod, postMod, assistantMod)
 	return registry.Modules()

@@ -2,6 +2,7 @@ package channel
 
 import (
 	"aimc-go/assistant/approval"
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
@@ -20,7 +21,7 @@ func NewSSEHub() *SSEHub {
 }
 
 // Acquire 获取或创建 Channel，如果会话忙则返回错误
-func (h *SSEHub) Acquire(sessionID string, w http.ResponseWriter, flusher http.Flusher) (*Channel, error) {
+func (h *SSEHub) Acquire(ctx context.Context, sessionID string, w http.ResponseWriter, flusher http.Flusher) (*Channel, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -28,7 +29,7 @@ func (h *SSEHub) Acquire(sessionID string, w http.ResponseWriter, flusher http.F
 		return nil, fmt.Errorf("session %s is busy", sessionID)
 	}
 
-	ch := NewChannel(sessionID, NewSSEWriter(w, flusher))
+	ch := NewChannel(sessionID, NewSSEWriter(ctx, w, flusher))
 	h.channels[sessionID] = ch
 	return ch, nil
 }

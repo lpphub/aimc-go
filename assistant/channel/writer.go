@@ -1,10 +1,11 @@
 package channel
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-	"os"
 )
 
 // ChunkType 输出片段类型
@@ -30,7 +31,7 @@ type Chunk struct {
 
 // Writer 输出接口
 type Writer interface {
-	Write(Chunk)
+	Write(Chunk) error
 }
 
 // MultiWriter 多 Writer 组合
@@ -42,10 +43,13 @@ func NewMultiWriter(writers ...Writer) *MultiWriter {
 	return &MultiWriter{Writers: writers}
 }
 
-func (m *MultiWriter) Write(c Chunk) {
+func (m *MultiWriter) Write(c Chunk) error {
 	for _, w := range m.Writers {
-		w.Write(c)
+		if err := w.Write(c); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // StdoutWriter 标准输出
@@ -55,31 +59,51 @@ func NewStdoutWriter() Writer {
 	return &StdoutWriter{}
 }
 
-func (s *StdoutWriter) Write(c Chunk) {
-	fmt.Fprint(os.Stdout, c.Content)
+func (s *StdoutWriter) Write(c Chunk) error {
+	_, err := fmt.Print(c.Content)
+	return err
 }
 
 // SSEWriter SSE 推送
 type SSEWriter struct {
 	w       http.ResponseWriter
 	flusher http.Flusher
+	ctx     context.Context
 }
 
-func NewSSEWriter(w http.ResponseWriter, flusher http.Flusher) Writer {
+func NewSSEWriter(ctx context.Context, w http.ResponseWriter, flusher http.Flusher) Writer {
 	return &SSEWriter{
 		w:       w,
 		flusher: flusher,
+		ctx:     ctx,
 	}
 }
 
-func (s *SSEWriter) Write(c Chunk) {
+func (s *SSEWriter) Write(c Chunk) error {
+	// 快速检测：context 已取消
+	if s.ctx != nil {
+		if err := s.ctx.Err(); err != nil {
+			return err
+		}
+	}
+
+	// 过滤 tool_call 和 tool_result 类型
+	if c.Type == TypeToolCall || c.Type == TypeToolResult {
+		return nil
+	}
+
+	if s.flusher == nil {
+		return errors.New("flusher is nil")
+	}
+
 	data, err := json.Marshal(c)
 	if err != nil {
-		data, _ = json.Marshal(Chunk{
-			Type:    TypeError,
-			Content: err.Error(),
-		})
+		return err
 	}
-	fmt.Fprintf(s.w, "data: %s\n\n", data)
+
+	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", data); err != nil {
+		return err
+	}
 	s.flusher.Flush()
+	return nil
 }

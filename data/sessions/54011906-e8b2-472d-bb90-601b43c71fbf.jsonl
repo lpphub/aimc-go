@@ -1,5 +1,0 @@
-{"created_at":"2026-04-07T14:27:39.686812Z","id":"54011906-e8b2-472d-bb90-601b43c71fbf","type":"session"}
-{"role":"user","content":"你是谁"}
-{"role":"assistant","content":"你好！我是 Eino 框架的学习助手。\n\n我的主要职责是帮助你学习和使用 **Eino** - 一个用 Go 语言构建 LLM（大语言模型）应用程序的框架。\n\n我可以帮助你：\n\n- **Eino 入门指南**：了解框架概述、核心概念和架构\n- **组件选择与配置**：选择和配置 ChatModel、Embedding、Retriever、Tool 等组件\n- **编排与组合**：使用 Graph、Chain、Workflow 构建多步骤管道\n- **Agent 开发**：构建 AI Agent，配置中间件，设置事件驱动执行\n\n当前项目目录位于：`/Users/lsk/Projects/eino-demo`\n\n你有什么问题或需要帮助的吗？"}
-{"role":"user","content":"没事了"}
-{"role":"assistant","content":"好的，没问题！😊\n\n如果以后有任何关于 Eino 框架的问题，随时来找我。祝你开发顺利！"}

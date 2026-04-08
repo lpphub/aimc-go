@@ -53,10 +53,11 @@ func (c *Channel) WaitInput(ctx context.Context) (*InputEvent, error) {
 }
 
 // Write 输出 Chunk
-func (c *Channel) Write(chunk Chunk) {
+func (c *Channel) Write(chunk Chunk) error {
 	if c.Writer != nil {
-		c.Writer.Write(chunk)
+		return c.Writer.Write(chunk)
 	}
+	return nil
 }
 
 // Close 关闭通道
