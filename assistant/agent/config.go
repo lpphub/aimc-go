@@ -66,6 +66,6 @@ func defaultConfig() *Config {
 	return &Config{
 		Name:          "assistant",
 		Description:   "AI Assistant",
-		MaxIterations: 50,
+		MaxIterations: 100,
 	}
 }

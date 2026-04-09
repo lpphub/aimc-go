@@ -64,7 +64,7 @@ func (h *EventHandler) handleMessage(mv *adk.MessageVariant, ch *channel.Channel
 		}
 		_ = ch.Write(channel.Chunk{
 			Type:    channel.TypeToolResult,
-			Content: fmt.Sprintf("✅ [tool result] -> %s\n", mv.ToolName),
+			Content: fmt.Sprintf("✅ [tool result] -> %s\t%s\n", mv.ToolName, h.truncate(result.Content, 200)),
 		})
 		return result, nil, nil
 	}
@@ -78,7 +78,7 @@ func (h *EventHandler) handleMessage(mv *adk.MessageVariant, ch *channel.Channel
 		msg, err := h.handleStreaming(mv, ch)
 		return msg, nil, err
 	}
-	msg := h.handleNonStreaming(mv, ch)
+	msg := h.handleRegular(mv, ch)
 	return msg, nil, nil
 }
 
@@ -116,7 +116,7 @@ func (h *EventHandler) handleStreaming(mv *adk.MessageVariant, ch *channel.Chann
 	for _, tc := range toolCalls {
 		_ = ch.Write(channel.Chunk{
 			Type:    channel.TypeToolCall,
-			Content: fmt.Sprintf("🔧 [tool call] -> %s\n", tc.Function.Name),
+			Content: fmt.Sprintf("🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
 		})
 	}
 
@@ -127,7 +127,7 @@ func (h *EventHandler) handleStreaming(mv *adk.MessageVariant, ch *channel.Chann
 	}, nil
 }
 
-func (h *EventHandler) handleNonStreaming(mv *adk.MessageVariant, ch *channel.Channel) *schema.Message {
+func (h *EventHandler) handleRegular(mv *adk.MessageVariant, ch *channel.Channel) *schema.Message {
 	if mv.Message == nil {
 		return nil
 	}
@@ -136,7 +136,7 @@ func (h *EventHandler) handleNonStreaming(mv *adk.MessageVariant, ch *channel.Ch
 	for _, tc := range mv.Message.ToolCalls {
 		_ = ch.Write(channel.Chunk{
 			Type:    channel.TypeToolCall,
-			Content: fmt.Sprintf("\n🔧 [tool call] -> %s\n", tc.Function.Name),
+			Content: fmt.Sprintf("\n🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
 		})
 	}
 	return mv.Message
@@ -163,4 +163,11 @@ func (h *EventHandler) Drain(iter *adk.AsyncIterator[*adk.AgentEvent], ch *chann
 			return messages, interrupt, nil
 		}
 	}
+}
+
+func (h *EventHandler) truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

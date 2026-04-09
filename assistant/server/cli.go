@@ -21,7 +21,9 @@ func RunCLI() {
 
 	ctx := context.Background()
 	scanner := bufio.NewScanner(os.Stdin)
-	ch := channel.NewCLIChannel(uuid.New().String(), scanner)
+	sessionID := uuid.New().String()
+
+	ch := channel.NewCLIChannel(sessionID, scanner)
 	defer ch.Close()
 
 	for {
