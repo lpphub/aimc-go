@@ -7,6 +7,7 @@ import (
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/middlewares/filesystem"
 	"github.com/cloudwego/eino/adk/middlewares/patchtoolcalls"
+	"github.com/cloudwego/eino/adk/middlewares/plantask"
 	"github.com/cloudwego/eino/adk/middlewares/reduction"
 	"github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/adk/middlewares/summarization"
@@ -73,5 +74,25 @@ func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, 
 		middlewares = append(middlewares, skillMW)
 	}
 
+	// plantask
+	if cfg.PlanTaskDir != "" {
+		ptw, err := plantask.New(ctx, &plantask.Config{
+			Backend: &planTaskBackend{Local: backend}, // 必需：存储后端
+			BaseDir: cfg.PlanTaskDir,                  // 必需：任务文件目录
+		})
+		if err != nil {
+			return nil, err
+		}
+		middlewares = append(middlewares, ptw)
+	}
+
 	return middlewares, nil
+}
+
+type planTaskBackend struct {
+	*local.Local
+}
+
+func (b *planTaskBackend) Delete(ctx context.Context, req *plantask.DeleteRequest) error {
+	return nil
 }

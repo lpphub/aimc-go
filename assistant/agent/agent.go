@@ -41,7 +41,8 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 	// 3. middlewares
 	if cfg.Middlewares == nil {
 		cfg.Middlewares, err = middleware.SetupMiddlewares(ctx, cfg.Model, middleware.Config{
-			SkillDir: cfg.SkillDir,
+			SkillDir:    cfg.SkillDir,
+			PlanTaskDir: cfg.PlanTaskDir,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("setup middlewares: %w", err)

@@ -22,6 +22,7 @@ type Config struct {
 	// 路径配置
 	ProjectRoot string // 项目根目录，用于 prompt 模板
 	SkillDir    string // skill 目录，为空则不启用 skill 中间件
+	PlanTaskDir string // plan task 目录，为空则不启用 plan task 中间件
 }
 
 // Option 配置选项
@@ -38,6 +39,12 @@ func WithProjectRoot(root string) Option {
 func WithSkillDir(dir string) Option {
 	return func(c *Config) {
 		c.SkillDir = dir
+	}
+}
+
+func WithPlanTaskDir(dir string) Option {
+	return func(c *Config) {
+		c.PlanTaskDir = dir
 	}
 }
 

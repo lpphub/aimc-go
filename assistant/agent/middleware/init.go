@@ -11,7 +11,8 @@ import (
 // Config middleware 配置
 type Config struct {
 	// SkillDir skill 文件目录，为空则不启用 skill 中间件
-	SkillDir string
+	SkillDir    string
+	PlanTaskDir string
 }
 
 func SetupMiddlewares(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {
