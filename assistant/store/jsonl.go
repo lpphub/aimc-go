@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/cloudwego/eino/schema"
+	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 // DefaultCacheSize 默认缓存容量
