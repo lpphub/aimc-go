@@ -7,6 +7,7 @@ require (
 	github.com/cloudwego/eino-examples v0.0.0-20260324024735-0b4e59269b89
 	github.com/cloudwego/eino-ext/adk/backend/local v0.2.4
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.10
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jinzhu/copier v0.4.0
 	github.com/joho/godotenv v1.5.1
