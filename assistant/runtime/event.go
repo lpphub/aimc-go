@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"aimc-go/assistant/channel"
+	"aimc-go/assistant/session"
 	"errors"
 	"fmt"
 	"io"
@@ -11,14 +11,14 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// EventHandler 处理 adk.AgentEvent 并写入 channel.Channel（无状态）
+// EventHandler 处理 adk.AgentEvent 并写入 session.Session（无状态）
 type EventHandler struct{}
 
 // HandleEvent 处理单个事件，返回：(产生的消息, 中断信息, 错误)
-func (h *EventHandler) HandleEvent(event *adk.AgentEvent, ch *channel.Channel) (*schema.Message, *adk.InterruptInfo, error) {
+func (h *EventHandler) HandleEvent(event *adk.AgentEvent, sess *session.Session) (*schema.Message, *adk.InterruptInfo, error) {
 	// 1. 错误
 	if event.Err != nil {
-		_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
+		_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
 		if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
 			return nil, nil, nil
 		}
@@ -27,7 +27,7 @@ func (h *EventHandler) HandleEvent(event *adk.AgentEvent, ch *channel.Channel) (
 
 	// 2. 动作
 	if event.Action != nil {
-		return nil, h.handleAction(event.Action, ch), nil
+		return nil, h.handleAction(event.Action, sess), nil
 	}
 
 	// 3. 消息
@@ -35,35 +35,35 @@ func (h *EventHandler) HandleEvent(event *adk.AgentEvent, ch *channel.Channel) (
 		return nil, nil, nil
 	}
 
-	return h.handleMessage(event.Output.MessageOutput, ch)
+	return h.handleMessage(event.Output.MessageOutput, sess)
 }
 
-func (h *EventHandler) handleAction(action *adk.AgentAction, ch *channel.Channel) *adk.InterruptInfo {
+func (h *EventHandler) handleAction(action *adk.AgentAction, sess *session.Session) *adk.InterruptInfo {
 	if action.Interrupted != nil {
 		return action.Interrupted
 	}
 	if action.TransferToAgent != nil {
-		_ = ch.Write(channel.Chunk{
-			Type:    channel.TypeMessage,
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeMessage,
 			Content: fmt.Sprintf("➡️ transfer to %s\n", action.TransferToAgent.DestAgentName),
 		})
 		return nil
 	}
 	if action.Exit {
-		_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "🏁 exit\n"})
+		_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: "🏁 exit\n"})
 	}
 	return nil
 }
 
-func (h *EventHandler) handleMessage(mv *adk.MessageVariant, ch *channel.Channel) (*schema.Message, *adk.InterruptInfo, error) {
+func (h *EventHandler) handleMessage(mv *adk.MessageVariant, sess *session.Session) (*schema.Message, *adk.InterruptInfo, error) {
 	// Tool 结果
 	if mv.Role == schema.Tool {
 		result, err := mv.GetMessage()
 		if err != nil {
 			return nil, nil, err
 		}
-		_ = ch.Write(channel.Chunk{
-			Type:    channel.TypeToolResult,
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeToolResult,
 			Content: fmt.Sprintf("✅ [tool result] -> %s\t%s\n", mv.ToolName, h.truncate(result.Content, 200)),
 		})
 		return result, nil, nil
@@ -75,14 +75,14 @@ func (h *EventHandler) handleMessage(mv *adk.MessageVariant, ch *channel.Channel
 	}
 
 	if mv.IsStreaming {
-		msg, err := h.handleStreaming(mv, ch)
+		msg, err := h.handleStreaming(mv, sess)
 		return msg, nil, err
 	}
-	msg := h.handleRegular(mv, ch)
+	msg := h.handleRegular(mv, sess)
 	return msg, nil, nil
 }
 
-func (h *EventHandler) handleStreaming(mv *adk.MessageVariant, ch *channel.Channel) (*schema.Message, error) {
+func (h *EventHandler) handleStreaming(mv *adk.MessageVariant, sess *session.Session) (*schema.Message, error) {
 	mv.MessageStream.SetAutomaticClose()
 
 	var contentBuf strings.Builder
@@ -102,7 +102,7 @@ func (h *EventHandler) handleStreaming(mv *adk.MessageVariant, ch *channel.Chann
 
 		if frame.Content != "" {
 			contentBuf.WriteString(frame.Content)
-			if err := ch.Write(channel.Chunk{Type: channel.TypeAssistant, Content: frame.Content}); err != nil {
+			if err := sess.Write(session.Chunk{Type: session.TypeAssistant, Content: frame.Content}); err != nil {
 				return nil, err
 			}
 		}
@@ -111,11 +111,11 @@ func (h *EventHandler) handleStreaming(mv *adk.MessageVariant, ch *channel.Chann
 		}
 	}
 
-	_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "\n"})
+	_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: "\n"})
 
 	for _, tc := range toolCalls {
-		_ = ch.Write(channel.Chunk{
-			Type:    channel.TypeToolCall,
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeToolCall,
 			Content: fmt.Sprintf("🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
 		})
 	}
@@ -127,15 +127,15 @@ func (h *EventHandler) handleStreaming(mv *adk.MessageVariant, ch *channel.Chann
 	}, nil
 }
 
-func (h *EventHandler) handleRegular(mv *adk.MessageVariant, ch *channel.Channel) *schema.Message {
+func (h *EventHandler) handleRegular(mv *adk.MessageVariant, sess *session.Session) *schema.Message {
 	if mv.Message == nil {
 		return nil
 	}
-	_ = ch.Write(channel.Chunk{Type: channel.TypeAssistant, Content: mv.Message.Content})
+	_ = sess.Write(session.Chunk{Type: session.TypeAssistant, Content: mv.Message.Content})
 
 	for _, tc := range mv.Message.ToolCalls {
-		_ = ch.Write(channel.Chunk{
-			Type:    channel.TypeToolCall,
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeToolCall,
 			Content: fmt.Sprintf("\n🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
 		})
 	}
@@ -143,7 +143,7 @@ func (h *EventHandler) handleRegular(mv *adk.MessageVariant, ch *channel.Channel
 }
 
 // Drain 消费事件迭代器并处理
-func (h *EventHandler) Drain(iter *adk.AsyncIterator[*adk.AgentEvent], ch *channel.Channel) ([]*schema.Message, *adk.InterruptInfo, error) {
+func (h *EventHandler) Drain(iter *adk.AsyncIterator[*adk.AgentEvent], sess *session.Session) ([]*schema.Message, *adk.InterruptInfo, error) {
 	messages := make([]*schema.Message, 0, 20)
 
 	for {
@@ -152,7 +152,7 @@ func (h *EventHandler) Drain(iter *adk.AsyncIterator[*adk.AgentEvent], ch *chann
 			return messages, nil, nil
 		}
 
-		msg, interrupt, err := h.HandleEvent(event, ch)
+		msg, interrupt, err := h.HandleEvent(event, sess)
 		if err != nil {
 			return nil, nil, err
 		}

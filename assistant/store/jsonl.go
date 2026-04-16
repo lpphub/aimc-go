@@ -18,35 +18,35 @@ import (
 type JSONLStore struct {
 	mu    sync.Mutex
 	Dir   string
-	Cache map[string]*Session
+	Cache map[string]*Conversation
 }
 
 // NewJSONLStore creates a new JSONLStore with the given directory path.
 func NewJSONLStore(dir string) *JSONLStore {
 	return &JSONLStore{
 		Dir:   dir,
-		Cache: make(map[string]*Session),
+		Cache: make(map[string]*Conversation),
 	}
 }
 
-// GetOrCreate returns the session for id, creating it if it does not exist.
-func (s *JSONLStore) GetOrCreate(_ context.Context, sessionID string) (*Session, error) {
+// GetOrCreate returns the conversation for id, creating it if it does not exist.
+func (s *JSONLStore) GetOrCreate(_ context.Context, conversationID string) (*Conversation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if sess, ok := s.Cache[sessionID]; ok {
-		return sess, nil
+	if conv, ok := s.Cache[conversationID]; ok {
+		return conv, nil
 	}
 
-	filePath := filepath.Join(s.Dir, sessionID+".jsonl")
+	filePath := filepath.Join(s.Dir, conversationID+".jsonl")
 
-	var sess *Session
+	var conv *Conversation
 
 	if _, statErr := os.Stat(filePath); os.IsNotExist(statErr) {
 		now := time.Now().UTC()
 		header := map[string]interface{}{
-			"type":       "session",
-			"id":         sessionID,
+			"type":       "conversation",
+			"id":         conversationID,
 			"created_at": now,
 		}
 
@@ -59,32 +59,32 @@ func (s *JSONLStore) GetOrCreate(_ context.Context, sessionID string) (*Session,
 			return nil, err
 		}
 
-		sess = &Session{
-			ID:        sessionID,
+		conv = &Conversation{
+			ID:        conversationID,
 			CreatedAt: now,
 			Messages:  make([]*schema.Message, 0),
 		}
 	} else {
-		loaded, err := s.loadSession(filePath)
+		loaded, err := s.loadConversation(filePath)
 		if err != nil {
 			return nil, err
 		}
-		sess = loaded
+		conv = loaded
 	}
 
-	s.Cache[sessionID] = sess
+	s.Cache[conversationID] = conv
 
-	return sess, nil
+	return conv, nil
 }
 
 // Append 追加一条或多条 message（支持批量写入）
-func (s *JSONLStore) Append(ctx context.Context, sessionID string, messages ...*schema.Message) error {
-	sess, err := s.GetOrCreate(ctx, sessionID)
+func (s *JSONLStore) Append(ctx context.Context, conversationID string, messages ...*schema.Message) error {
+	conv, err := s.GetOrCreate(ctx, conversationID)
 	if err != nil {
 		return err
 	}
 
-	f, err := os.OpenFile(filepath.Join(s.Dir, sessionID+".jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(filepath.Join(s.Dir, conversationID+".jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (s *JSONLStore) Append(ctx context.Context, sessionID string, messages ...*
 	// 使用 bufio.Writer 批量写入
 	writer := bufio.NewWriter(f)
 	for _, msg := range messages {
-		sess.Messages = append(sess.Messages, msg)
+		conv.Messages = append(conv.Messages, msg)
 
 		data, err := json.Marshal(msg)
 		if err != nil {
@@ -110,7 +110,7 @@ func (s *JSONLStore) Append(ctx context.Context, sessionID string, messages ...*
 	return writer.Flush()
 }
 
-func (s *JSONLStore) loadSession(filePath string) (*Session, error) {
+func (s *JSONLStore) loadConversation(filePath string) (*Conversation, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func (s *JSONLStore) loadSession(filePath string) (*Session, error) {
 
 	scanner := bufio.NewScanner(f)
 	if !scanner.Scan() {
-		return nil, fmt.Errorf("empty session file: %s", filePath)
+		return nil, fmt.Errorf("empty conversation file: %s", filePath)
 	}
 
 	var header struct {
@@ -128,10 +128,10 @@ func (s *JSONLStore) loadSession(filePath string) (*Session, error) {
 		CreatedAt time.Time `json:"created_at"`
 	}
 	if err = json.Unmarshal(scanner.Bytes(), &header); err != nil {
-		return nil, fmt.Errorf("bad session header in %s: %w", filePath, err)
+		return nil, fmt.Errorf("bad conversation header in %s: %w", filePath, err)
 	}
 
-	sess := &Session{
+	conv := &Conversation{
 		ID:        header.ID,
 		CreatedAt: header.CreatedAt,
 		Messages:  make([]*schema.Message, 0),
@@ -148,12 +148,12 @@ func (s *JSONLStore) loadSession(filePath string) (*Session, error) {
 			log.Printf("warn: failed to parse message in %s: %v", filePath, err)
 			continue
 		}
-		sess.Messages = append(sess.Messages, &msg)
+		conv.Messages = append(conv.Messages, &msg)
 	}
 
 	if err = scanner.Err(); err != nil {
 		return nil, err
 	}
 
-	return sess, nil
+	return conv, nil
 }

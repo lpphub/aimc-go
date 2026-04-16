@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"aimc-go/assistant/approval"
-	"aimc-go/assistant/channel"
+	"aimc-go/assistant/session"
 	"aimc-go/assistant/store"
 	"context"
 	"fmt"
@@ -98,48 +98,48 @@ func (r *Runtime) Events(ctx context.Context, messages []*schema.Message, checkp
 }
 
 // Run 执行一轮对话（完整流程）
-func (r *Runtime) Run(ctx context.Context, ch *channel.Channel, query string) error {
+func (r *Runtime) Run(ctx context.Context, sess *session.Session, query string) error {
 	// 1. 存储用户消息
-	if err := r.store.Append(ctx, ch.ID, schema.UserMessage(query)); err != nil {
+	if err := r.store.Append(ctx, sess.ID, schema.UserMessage(query)); err != nil {
 		return fmt.Errorf("append user message: %w", err)
 	}
 
 	// 2. 获取历史消息
-	sessHistory, err := r.store.GetOrCreate(ctx, ch.ID)
+	conv, err := r.store.GetOrCreate(ctx, sess.ID)
 	if err != nil {
-		return fmt.Errorf("get session history: %w", err)
+		return fmt.Errorf("get conversation: %w", err)
 	}
 
 	// 3. 运行 agent
-	_ = ch.Write(channel.Chunk{Type: channel.TypeMessage, Content: "🤖: "})
-	iter := r.Generate(ctx, sessHistory.Messages, ch.ID)
+	_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: "🤖: "})
+	iter := r.Generate(ctx, conv.Messages, sess.ID)
 
 	// 4. 处理事件流
-	messages, interruptInfo, err := r.handler.Drain(iter, ch)
+	messages, interruptInfo, err := r.handler.Drain(iter, sess)
 	if err != nil {
 		return fmt.Errorf("process events: %w", err)
 	}
 
 	// 5. 存储输出消息
 	if len(messages) > 0 {
-		if err = r.store.Append(ctx, ch.ID, messages...); err != nil {
+		if err = r.store.Append(ctx, sess.ID, messages...); err != nil {
 			return fmt.Errorf("append messages: %w", err)
 		}
 	}
 
 	// 6. 处理中断（审批）
 	if interruptInfo != nil {
-		return r.handleInterrupt(ctx, ch, interruptInfo)
+		return r.handleInterrupt(ctx, sess, interruptInfo)
 	}
 
 	// 7. 发送完成信号
-	_ = ch.Write(channel.Chunk{Type: channel.TypeDone})
+	_ = sess.Write(session.Chunk{Type: session.TypeDone})
 
 	return nil
 }
 
 // Resume 恢复中断的对话
-func (r *Runtime) Resume(ctx context.Context, ch *channel.Channel, checkpointID string, resumeData map[string]any) (
+func (r *Runtime) Resume(ctx context.Context, sess *session.Session, checkpointID string, resumeData map[string]any) (
 	[]*schema.Message, *adk.InterruptInfo, error,
 ) {
 	events, err := r.runner.ResumeWithParams(ctx, checkpointID, &adk.ResumeParams{
@@ -149,11 +149,11 @@ func (r *Runtime) Resume(ctx context.Context, ch *channel.Channel, checkpointID 
 		return nil, nil, fmt.Errorf("resume with params: %w", err)
 	}
 
-	return r.handler.Drain(events, ch)
+	return r.handler.Drain(events, sess)
 }
 
 // handleInterrupt 处理中断（审批）
-func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, interruptInfo *adk.InterruptInfo) error {
+func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, interruptInfo *adk.InterruptInfo) error {
 	for _, ic := range interruptInfo.InterruptContexts {
 		if !ic.IsRootCause {
 			continue
@@ -166,19 +166,19 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 			return fmt.Errorf("unexpected interrupt info type: %T", ic.Info)
 		}
 
-		_ = ch.Write(channel.Chunk{
-			Type:    channel.TypeApproval,
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeApproval,
 			Content: info.String(),
 			Meta:    map[string]any{"approval_id": approvalID, "tool_name": info.ToolName},
 		})
 
 		// 等待审批结果
-		input, err := ch.WaitInput(ctx)
+		input, err := sess.WaitInput(ctx)
 		if err != nil {
 			return fmt.Errorf("wait approval input: %w", err)
 		}
 
-		if input.Type != channel.InputApproval {
+		if input.Type != session.InputApproval {
 			return fmt.Errorf("unexpected input type: %s", input.Type)
 		}
 
@@ -194,13 +194,13 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 
 		// 发送审批结果通知
 		if result.Approved {
-			_ = ch.Write(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
+			_ = sess.Write(session.Chunk{Type: session.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
 		} else {
-			_ = ch.Write(channel.Chunk{Type: channel.TypeApprovalRes, Content: "✖️ Rejected\n"})
+			_ = sess.Write(session.Chunk{Type: session.TypeApprovalRes, Content: "✖️ Rejected\n"})
 		}
 
 		// 恢复执行
-		messages, newInterrupt, err := r.Resume(ctx, ch, ch.ID, map[string]any{
+		messages, newInterrupt, err := r.Resume(ctx, sess, sess.ID, map[string]any{
 			approvalID: result,
 		})
 		if err != nil {
@@ -209,19 +209,19 @@ func (r *Runtime) handleInterrupt(ctx context.Context, ch *channel.Channel, inte
 
 		// 存储恢复后的消息
 		if len(messages) > 0 {
-			if err = r.store.Append(ctx, ch.ID, messages...); err != nil {
+			if err = r.store.Append(ctx, sess.ID, messages...); err != nil {
 				return fmt.Errorf("append resumed messages: %w", err)
 			}
 		}
 
 		// 递归处理后续中断
 		if newInterrupt != nil {
-			return r.handleInterrupt(ctx, ch, newInterrupt)
+			return r.handleInterrupt(ctx, sess, newInterrupt)
 		}
 	}
 
 	// 发送完成信号
-	_ = ch.Write(channel.Chunk{Type: channel.TypeDone})
+	_ = sess.Write(session.Chunk{Type: session.TypeDone})
 
 	return nil
 }

@@ -20,7 +20,7 @@ func NewRuntime() (*runtime.Runtime, error) {
 		return nil, err
 	}
 
-	jsonlStore := store.NewJSONLStore("./data/sessions")
+	jsonlStore := store.NewJSONLStore("./data/conversations")
 
 	return runtime.New(assistantAgent, runtime.WithStore(jsonlStore))
 }

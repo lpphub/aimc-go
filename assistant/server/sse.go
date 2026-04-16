@@ -3,8 +3,8 @@ package server
 import (
 	"aimc-go/app/modules/core"
 	"aimc-go/assistant/approval"
-	"aimc-go/assistant/channel"
 	"aimc-go/assistant/runtime"
+	"aimc-go/assistant/session"
 	"context"
 	"embed"
 	"errors"
@@ -20,7 +20,7 @@ var staticFS embed.FS
 
 type SSEModule struct {
 	rt  *runtime.Runtime
-	hub *channel.SSEHub
+	hub *session.SSEHub
 }
 
 func NewSSE() (*SSEModule, error) {
@@ -31,7 +31,7 @@ func NewSSE() (*SSEModule, error) {
 
 	return &SSEModule{
 		rt:  rt,
-		hub: channel.NewSSEHub(),
+		hub: session.NewSSEHub(),
 	}, nil
 }
 
@@ -66,7 +66,7 @@ func (m *SSEModule) chat(c *gin.Context) {
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
 
-	ch, err := m.hub.Acquire(ctx, req.SessionID, c.Writer, flusher)
+	sess, err := m.hub.Acquire(ctx, req.SessionID, c.Writer, flusher)
 	if err != nil {
 		c.AbortWithError(409, err)
 		return
@@ -75,13 +75,13 @@ func (m *SSEModule) chat(c *gin.Context) {
 	// 异步运行 runtime
 	go func() {
 		defer cancel()
-		defer ch.Close()
+		defer sess.Close()
 		defer m.hub.Release(req.SessionID)
 
-		err := m.rt.Run(ctx, ch, req.Query)
+		err := m.rt.Run(ctx, sess, req.Query)
 		if err != nil {
-			ch.Write(channel.Chunk{
-				Type:    channel.TypeError,
+			sess.Write(session.Chunk{
+				Type:    session.TypeError,
 				Content: err.Error(),
 			})
 		}

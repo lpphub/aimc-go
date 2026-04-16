@@ -1,7 +1,7 @@
 package server
 
 import (
-	"aimc-go/assistant/channel"
+	"aimc-go/assistant/session"
 	"bufio"
 	"context"
 	"fmt"
@@ -23,8 +23,8 @@ func RunCLI() {
 	scanner := bufio.NewScanner(os.Stdin)
 	sessionID := uuid.New().String()
 
-	ch := channel.NewCLIChannel(sessionID, scanner)
-	defer ch.Close()
+	sess := session.NewCLI(sessionID, scanner)
+	defer sess.Close()
 
 	for {
 		fmt.Print("👤: ")
@@ -36,7 +36,7 @@ func RunCLI() {
 			break
 		}
 
-		if err := rt.Run(ctx, ch, line); err != nil {
+		if err := rt.Run(ctx, sess, line); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 	}

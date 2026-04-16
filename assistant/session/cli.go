@@ -1,18 +1,19 @@
-package channel
+package session
 
 import (
-	"aimc-go/assistant/approval"
 	"bufio"
 	"context"
 	"fmt"
 	"strings"
+
+	"aimc-go/assistant/approval"
 )
 
-// NewCLIChannel 创建 CLI 场景的 Channel
-func NewCLIChannel(sessionID string, scanner *bufio.Scanner) *Channel {
-	ch := NewChannel(sessionID, NewStdoutWriter())
-	
-	ch.OnInput = func(ctx context.Context) (*InputEvent, error) {
+// NewCLI 创建 CLI 场景的 Session
+func NewCLI(sessionID string, scanner *bufio.Scanner) *Session {
+	sess := New(sessionID, NewStdoutWriter())
+
+	sess.OnInput = func(ctx context.Context) (*InputEvent, error) {
 		if !scanner.Scan() {
 			return nil, fmt.Errorf("failed to read input: %w", scanner.Err())
 		}
@@ -25,5 +26,5 @@ func NewCLIChannel(sessionID string, scanner *bufio.Scanner) *Channel {
 		}, nil
 	}
 
-	return ch
+	return sess
 }

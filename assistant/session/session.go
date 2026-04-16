@@ -1,4 +1,4 @@
-package channel
+package session
 
 import (
 	"context"
@@ -19,8 +19,8 @@ type InputEvent struct {
 	Data any
 }
 
-// Channel 双向交互通道
-type Channel struct {
+// Session 运行时 I/O 上下文（双向交互通道）
+type Session struct {
 	ID      string
 	Writer  Writer                                         // agent 输出
 	Input   chan InputEvent                                // SSE 场景：channel 输入
@@ -29,9 +29,9 @@ type Channel struct {
 	closeOnce sync.Once
 }
 
-// NewChannel 创建 Channel
-func NewChannel(sessionID string, writer Writer) *Channel {
-	return &Channel{
+// New 创建 Session
+func New(sessionID string, writer Writer) *Session {
+	return &Session{
 		ID:     sessionID,
 		Writer: writer,
 		Input:  make(chan InputEvent, 1),
@@ -39,13 +39,13 @@ func NewChannel(sessionID string, writer Writer) *Channel {
 }
 
 // WaitInput 阻塞等待输入
-func (c *Channel) WaitInput(ctx context.Context) (*InputEvent, error) {
-	if c.OnInput != nil {
-		return c.OnInput(ctx)
+func (s *Session) WaitInput(ctx context.Context) (*InputEvent, error) {
+	if s.OnInput != nil {
+		return s.OnInput(ctx)
 	}
 
 	select {
-	case input := <-c.Input:
+	case input := <-s.Input:
 		return &input, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -53,18 +53,18 @@ func (c *Channel) WaitInput(ctx context.Context) (*InputEvent, error) {
 }
 
 // Write 输出 Chunk
-func (c *Channel) Write(chunk Chunk) error {
-	if c.Writer != nil {
-		return c.Writer.Write(chunk)
+func (s *Session) Write(chunk Chunk) error {
+	if s.Writer != nil {
+		return s.Writer.Write(chunk)
 	}
 	return nil
 }
 
-// Close 关闭通道
-func (c *Channel) Close() {
-	c.closeOnce.Do(func() {
-		if c.Input != nil {
-			close(c.Input)
+// Close 关闭会话
+func (s *Session) Close() {
+	s.closeOnce.Do(func() {
+		if s.Input != nil {
+			close(s.Input)
 		}
 	})
 }
