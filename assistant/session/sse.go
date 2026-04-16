@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"aimc-go/assistant/approval"
 )
@@ -31,29 +32,36 @@ func (h *SSEHub) Acquire(ctx context.Context, sessionID string, w http.ResponseW
 	}
 
 	sess := New(sessionID, NewSSEWriter(ctx, w, flusher))
+	sess.Input = make(chan InputEvent, 1)
+	sess.closed = make(chan struct{})
+	
 	h.sessions[sessionID] = sess
 	return sess, nil
 }
 
-// SubmitApproval 提交审批结果
+// SubmitApproval 提交审批结果，阻塞等待 session 接收
 func (h *SSEHub) SubmitApproval(sessionID string, result *approval.Result) error {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
 	sess, ok := h.sessions[sessionID]
+	h.mu.RUnlock()
+
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
 
-	// 使用 select 防止向已关闭的 channel 发送导致 panic
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	select {
 	case sess.Input <- InputEvent{
 		Type: InputApproval,
 		Data: result,
 	}:
 		return nil
-	default:
-		return fmt.Errorf("session closed or full: %s", sessionID)
+	case <-sess.Closed():
+		return fmt.Errorf("session closed: %s", sessionID)
+	case <-ctx.Done():
+		return fmt.Errorf("timeout waiting for session to receive approval")
 	}
 }
 

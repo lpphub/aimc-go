@@ -21,20 +21,19 @@ type InputEvent struct {
 
 // Session 运行时 I/O 上下文（双向交互通道）
 type Session struct {
-	ID      string
-	Writer  Writer                                         // agent 输出
-	Input   chan InputEvent                                // SSE 场景：channel 输入
-	OnInput func(ctx context.Context) (*InputEvent, error) // CLI 场景：阻塞回调
-
+	ID        string
+	Writer    Writer                                         // agent 输出
+	Input     chan InputEvent                                // SSE 场景：channel 输入
+	OnInput   func(ctx context.Context) (*InputEvent, error) // CLI 场景：阻塞回调
+	closed    chan struct{}                                  // 关闭信号（SSE 场景）
 	closeOnce sync.Once
 }
 
-// New 创建 Session
+// New 创建 Session（只初始化公共字段）
 func New(sessionID string, writer Writer) *Session {
 	return &Session{
 		ID:     sessionID,
 		Writer: writer,
-		Input:  make(chan InputEvent, 1),
 	}
 }
 
@@ -60,9 +59,17 @@ func (s *Session) Write(chunk Chunk) error {
 	return nil
 }
 
+// Closed 返回关闭信号 channel
+func (s *Session) Closed() <-chan struct{} {
+	return s.closed
+}
+
 // Close 关闭会话
 func (s *Session) Close() {
 	s.closeOnce.Do(func() {
+		if s.closed != nil {
+			close(s.closed)
+		}
 		if s.Input != nil {
 			close(s.Input)
 		}

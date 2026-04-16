@@ -23,8 +23,7 @@ func RunCLI() {
 	scanner := bufio.NewScanner(os.Stdin)
 	sessionID := uuid.New().String()
 
-	sess := session.NewCLI(sessionID, scanner)
-	defer sess.Close()
+	sess := session.NewCLI(sessionID, session.NewStdoutWriter(), scanner)
 
 	for {
 		fmt.Print("👤: ")
