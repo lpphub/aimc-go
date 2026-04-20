@@ -20,9 +20,9 @@ import (
 const DefaultCacheSize = 128
 
 type JSONLStore struct {
-	mu    sync.Mutex
-	Dir   string
-	cache *lru.Cache[string, *Conversation]
+	Dir       string
+	cache     *lru.Cache[string, *Conversation]
+	convLocks sync.Map // conversationID -> *sync.Mutex (细粒度锁)
 }
 
 // NewJSONLStore creates a new JSONLStore with the given directory path.
@@ -40,17 +40,30 @@ func NewJSONLStore(dir string) *JSONLStore {
 	}
 }
 
+// getConvLock 获取指定 conversation 的独立锁
+func (s *JSONLStore) getConvLock(id string) *sync.Mutex {
+	lock, _ := s.convLocks.LoadOrStore(id, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
+
 // GetOrCreate 返回 conversation，不存在则创建
 func (s *JSONLStore) GetOrCreate(_ context.Context, conversationID string) (*Conversation, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// 1. 检查缓存
+	// 1. 快速缓存检查（无锁读取）
 	if conv, ok := s.cache.Get(conversationID); ok {
 		return conv, nil
 	}
 
-	// 2. 检查文件
+	// 2. 获取该 conversation 的独立锁
+	lock := s.getConvLock(conversationID)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// 3. 再次检查缓存（double-check，避免重复加载）
+	if conv, ok := s.cache.Get(conversationID); ok {
+		return conv, nil
+	}
+
+	// 4. 检查文件
 	filePath := filepath.Join(s.Dir, conversationID+".jsonl")
 
 	var conv *Conversation
@@ -85,7 +98,7 @@ func (s *JSONLStore) GetOrCreate(_ context.Context, conversationID string) (*Con
 		}
 	}
 
-	// 3. 加入缓存
+	// 5. 加入缓存
 	s.cache.Add(conversationID, conv)
 
 	return conv, nil
@@ -93,21 +106,24 @@ func (s *JSONLStore) GetOrCreate(_ context.Context, conversationID string) (*Con
 
 // Append 追加一条或多条 message（支持批量写入）
 func (s *JSONLStore) Append(_ context.Context, conversationID string, messages ...*schema.Message) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// 1. 获取该 conversation 的独立锁
+	lock := s.getConvLock(conversationID)
+	lock.Lock()
+	defer lock.Unlock()
 
-	// 1. 获取 conversation（从缓存或文件）
+	// 2. 获取 conversation（从缓存或文件）
 	conv, ok := s.cache.Get(conversationID)
 	if !ok {
 		filePath := filepath.Join(s.Dir, conversationID+".jsonl")
-		conv, err := s.loadConversation(filePath)
+		var err error
+		conv, err = s.loadConversation(filePath)
 		if err != nil {
 			return fmt.Errorf("load conversation: %w", err)
 		}
 		s.cache.Add(conversationID, conv)
 	}
 
-	// 2. 追加到文件
+	// 3. 追加到文件
 	filePath := filepath.Join(s.Dir, conversationID+".jsonl")
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
