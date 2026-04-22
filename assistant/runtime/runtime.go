@@ -15,13 +15,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// Runtime 服务层核心，管理完整的对话生命周期
-type Runtime struct {
-	runner          *adk.Runner
-	store           store.Store
-	checkpointStore adk.CheckPointStore
-}
-
 // RuntimeOption Runtime 配置选项
 type RuntimeOption func(*Runtime)
 
@@ -30,6 +23,13 @@ func WithStore(s store.Store) RuntimeOption {
 	return func(r *Runtime) {
 		r.store = s
 	}
+}
+
+// Runtime 服务层核心，管理完整的对话生命周期
+type Runtime struct {
+	runner          *adk.Runner
+	store           store.Store
+	checkpointStore adk.CheckPointStore
 }
 
 // New 创建 Runtime
@@ -213,6 +213,29 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 	return nil
 }
 
+// drain 消费事件迭代器并处理
+func (r *Runtime) drain(iter *adk.AsyncIterator[*adk.AgentEvent], sess *session.Session) ([]*schema.Message, *adk.InterruptInfo, error) {
+	messages := make([]*schema.Message, 0, 20)
+
+	for {
+		event, ok := iter.Next()
+		if !ok {
+			return messages, nil, nil
+		}
+
+		msg, interrupt, err := r.handleEvent(event, sess)
+		if err != nil {
+			return nil, nil, err
+		}
+		if msg != nil {
+			messages = append(messages, msg)
+		}
+		if interrupt != nil {
+			return messages, interrupt, nil
+		}
+	}
+}
+
 // handleEvent 处理单个事件
 func (r *Runtime) handleEvent(event *adk.AgentEvent, sess *session.Session) (*schema.Message, *adk.InterruptInfo, error) {
 	// 1. 错误
@@ -276,15 +299,15 @@ func (r *Runtime) handleMessage(mv *adk.MessageVariant, sess *session.Session) (
 	}
 
 	if mv.IsStreaming {
-		msg, err := r.handleStreaming(mv, sess)
+		msg, err := r.handleStreamingMessage(mv, sess)
 		return msg, nil, err
 	}
-	msg := r.handleRegular(mv, sess)
+	msg := r.handleRegularMessage(mv, sess)
 	return msg, nil, nil
 }
 
-// handleStreaming 处理流式消息
-func (r *Runtime) handleStreaming(mv *adk.MessageVariant, sess *session.Session) (*schema.Message, error) {
+// handleStreamingMessage 处理流式消息
+func (r *Runtime) handleStreamingMessage(mv *adk.MessageVariant, sess *session.Session) (*schema.Message, error) {
 	mv.MessageStream.SetAutomaticClose()
 
 	var contentBuf strings.Builder
@@ -329,8 +352,8 @@ func (r *Runtime) handleStreaming(mv *adk.MessageVariant, sess *session.Session)
 	}, nil
 }
 
-// handleRegular 处理非流式消息
-func (r *Runtime) handleRegular(mv *adk.MessageVariant, sess *session.Session) *schema.Message {
+// handleRegularMessage 处理非流式消息
+func (r *Runtime) handleRegularMessage(mv *adk.MessageVariant, sess *session.Session) *schema.Message {
 	if mv.Message == nil {
 		return nil
 	}
@@ -343,29 +366,6 @@ func (r *Runtime) handleRegular(mv *adk.MessageVariant, sess *session.Session) *
 		})
 	}
 	return mv.Message
-}
-
-// drain 消费事件迭代器并处理
-func (r *Runtime) drain(iter *adk.AsyncIterator[*adk.AgentEvent], sess *session.Session) ([]*schema.Message, *adk.InterruptInfo, error) {
-	messages := make([]*schema.Message, 0, 20)
-
-	for {
-		event, ok := iter.Next()
-		if !ok {
-			return messages, nil, nil
-		}
-
-		msg, interrupt, err := r.handleEvent(event, sess)
-		if err != nil {
-			return nil, nil, err
-		}
-		if msg != nil {
-			messages = append(messages, msg)
-		}
-		if interrupt != nil {
-			return messages, interrupt, nil
-		}
-	}
 }
 
 // truncate 截断字符串

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // RunCLI 运行 CLI 模式
@@ -20,9 +22,9 @@ func RunCLI() {
 
 	ctx := context.Background()
 	scanner := bufio.NewScanner(os.Stdin)
-	//sessionID := uuid.New().String()
+	sessionID := uuid.New().String()
 
-	sess := NewCLI("414ad3fa-b1f8-4d59-8a78-24327a59ae2f", session.NewStdoutWriter(), scanner)
+	sess := NewCLI(sessionID, session.NewStdoutWriter(), scanner)
 
 	for {
 		fmt.Print("👤: ")
