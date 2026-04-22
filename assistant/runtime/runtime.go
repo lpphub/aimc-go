@@ -5,7 +5,10 @@ import (
 	"aimc-go/assistant/session"
 	"aimc-go/assistant/store"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 
 	adkstore "github.com/cloudwego/eino-examples/adk/common/store"
 	"github.com/cloudwego/eino/adk"
@@ -17,7 +20,6 @@ type Runtime struct {
 	runner          *adk.Runner
 	store           store.Store
 	checkpointStore adk.CheckPointStore
-	handler         EventHandler // 事件处理器（无状态）
 }
 
 // RuntimeOption Runtime 配置选项
@@ -33,7 +35,6 @@ func WithStore(s store.Store) RuntimeOption {
 // New 创建 Runtime
 func New(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
 	r := &Runtime{
-		handler:         EventHandler{},
 		checkpointStore: adkstore.NewInMemoryStore(), // 默认内存 checkpoint
 	}
 
@@ -56,25 +57,11 @@ func New(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
 }
 
 // Generate 执行对话，返回事件迭代器（原始 API）
-// 用法：
-//
-//	iter := rt.Generate(ctx, messages, checkpointID)
-//	for {
-//	    event, ok := iter.Next()
-//	    if !ok { break }
-//	    // 处理 event.Err / event.Action / event.Output
-//	}
 func (r *Runtime) Generate(ctx context.Context, messages []*schema.Message, checkpointID string) *adk.AsyncIterator[*adk.AgentEvent] {
 	return r.runner.Run(ctx, messages, adk.WithCheckPointID(checkpointID))
 }
 
 // Events 执行对话，返回事件 channel（便利 API）
-// 用法：
-//
-//	for event := range rt.Events(ctx, messages, checkpointID) {
-//	    if event.Err != nil { ... }
-//	    if event.Output != nil { ... }
-//	}
 func (r *Runtime) Events(ctx context.Context, messages []*schema.Message, checkpointID string) <-chan *adk.AgentEvent {
 	out := make(chan *adk.AgentEvent, 32)
 
@@ -115,7 +102,7 @@ func (r *Runtime) Run(ctx context.Context, sess *session.Session, query string) 
 	iter := r.Generate(ctx, conv.Messages, sess.ID)
 
 	// 4. 处理事件流
-	messages, interruptInfo, err := r.handler.Drain(iter, sess)
+	messages, interruptInfo, err := r.drain(iter, sess)
 	if err != nil {
 		return fmt.Errorf("process events: %w", err)
 	}
@@ -149,7 +136,7 @@ func (r *Runtime) Resume(ctx context.Context, sess *session.Session, checkpointI
 		return nil, nil, fmt.Errorf("resume with params: %w", err)
 	}
 
-	return r.handler.Drain(events, sess)
+	return r.drain(events, sess)
 }
 
 // handleInterrupt 处理中断（审批）
@@ -187,7 +174,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 			return fmt.Errorf("unexpected approval result type: %T", input.Data)
 		}
 
-		// 校验 ApprovalID（SSE 场景需要匹配，CLI 场景可跳过）
+		// 校验 ApprovalID
 		if result.ApprovalID != "" && result.ApprovalID != approvalID {
 			return fmt.Errorf("approval ID mismatch: expected %s, got %s", approvalID, result.ApprovalID)
 		}
@@ -224,4 +211,167 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 	_ = sess.Write(session.Chunk{Type: session.TypeDone})
 
 	return nil
+}
+
+// handleEvent 处理单个事件
+func (r *Runtime) handleEvent(event *adk.AgentEvent, sess *session.Session) (*schema.Message, *adk.InterruptInfo, error) {
+	// 1. 错误
+	if event.Err != nil {
+		_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
+		if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
+			return nil, nil, nil
+		}
+		return nil, nil, event.Err
+	}
+
+	// 2. 动作
+	if event.Action != nil {
+		return nil, r.handleAction(event.Action, sess), nil
+	}
+
+	// 3. 消息
+	if event.Output == nil || event.Output.MessageOutput == nil {
+		return nil, nil, nil
+	}
+
+	return r.handleMessage(event.Output.MessageOutput, sess)
+}
+
+// handleAction 处理动作事件
+func (r *Runtime) handleAction(action *adk.AgentAction, sess *session.Session) *adk.InterruptInfo {
+	if action.Interrupted != nil {
+		return action.Interrupted
+	}
+	if action.TransferToAgent != nil {
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeMessage,
+			Content: fmt.Sprintf("➡️ transfer to %s\n", action.TransferToAgent.DestAgentName),
+		})
+		return nil
+	}
+	if action.Exit {
+		_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: "🏁 exit\n"})
+	}
+	return nil
+}
+
+// handleMessage 处理消息事件
+func (r *Runtime) handleMessage(mv *adk.MessageVariant, sess *session.Session) (*schema.Message, *adk.InterruptInfo, error) {
+	// Tool 结果
+	if mv.Role == schema.Tool {
+		result, err := mv.GetMessage()
+		if err != nil {
+			return nil, nil, err
+		}
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeToolResult,
+			Content: fmt.Sprintf("✅ [tool result] -> %s\t%s\n", mv.ToolName, truncate(result.Content, 200)),
+		})
+		return result, nil, nil
+	}
+
+	// Assistant
+	if mv.Role != schema.Assistant && mv.Role != "" {
+		return nil, nil, nil
+	}
+
+	if mv.IsStreaming {
+		msg, err := r.handleStreaming(mv, sess)
+		return msg, nil, err
+	}
+	msg := r.handleRegular(mv, sess)
+	return msg, nil, nil
+}
+
+// handleStreaming 处理流式消息
+func (r *Runtime) handleStreaming(mv *adk.MessageVariant, sess *session.Session) (*schema.Message, error) {
+	mv.MessageStream.SetAutomaticClose()
+
+	var contentBuf strings.Builder
+	var toolCalls []schema.ToolCall
+
+	for {
+		frame, err := mv.MessageStream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if frame == nil {
+			continue
+		}
+
+		if frame.Content != "" {
+			contentBuf.WriteString(frame.Content)
+			if err := sess.Write(session.Chunk{Type: session.TypeAssistant, Content: frame.Content}); err != nil {
+				return nil, err
+			}
+		}
+		if len(frame.ToolCalls) > 0 {
+			toolCalls = append(toolCalls, frame.ToolCalls...)
+		}
+	}
+
+	_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: "\n"})
+
+	for _, tc := range toolCalls {
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeToolCall,
+			Content: fmt.Sprintf("🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
+		})
+	}
+
+	return &schema.Message{
+		Role:      schema.Assistant,
+		Content:   contentBuf.String(),
+		ToolCalls: toolCalls,
+	}, nil
+}
+
+// handleRegular 处理非流式消息
+func (r *Runtime) handleRegular(mv *adk.MessageVariant, sess *session.Session) *schema.Message {
+	if mv.Message == nil {
+		return nil
+	}
+	_ = sess.Write(session.Chunk{Type: session.TypeAssistant, Content: mv.Message.Content})
+
+	for _, tc := range mv.Message.ToolCalls {
+		_ = sess.Write(session.Chunk{
+			Type:    session.TypeToolCall,
+			Content: fmt.Sprintf("\n🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
+		})
+	}
+	return mv.Message
+}
+
+// drain 消费事件迭代器并处理
+func (r *Runtime) drain(iter *adk.AsyncIterator[*adk.AgentEvent], sess *session.Session) ([]*schema.Message, *adk.InterruptInfo, error) {
+	messages := make([]*schema.Message, 0, 20)
+
+	for {
+		event, ok := iter.Next()
+		if !ok {
+			return messages, nil, nil
+		}
+
+		msg, interrupt, err := r.handleEvent(event, sess)
+		if err != nil {
+			return nil, nil, err
+		}
+		if msg != nil {
+			messages = append(messages, msg)
+		}
+		if interrupt != nil {
+			return messages, interrupt, nil
+		}
+	}
+}
+
+// truncate 截断字符串
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

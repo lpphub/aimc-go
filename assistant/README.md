@@ -81,8 +81,7 @@ assistant/
 │   └── writer.go              # Writer 接口 + 实现
 │
 ├── runtime/                   # 运行时核心
-│   ├── runtime.go             # Runtime 结构 + Run/Resume
-│   └── event.go               # EventHandler
+│   └── runtime.go             # Runtime 结构 + Run/Resume + 事件处理方法
 │
 ├── store/                     # 存储层
 │   ├── store.go               # Store 接口
@@ -188,7 +187,7 @@ type Chunk struct {
        ▼
      Runtime.Run(ctx, session, query)
        │
-       ├──→ EventHandler.Drain() → session.Write() → StdoutWriter
+       ├──→ Runtime.drain() → session.Write() → StdoutWriter
        │
        └→ handleInterrupt() → session.WaitInput() → OnInput()
        
@@ -301,7 +300,7 @@ func (m *SSEModule) approval(c *gin.Context) {
 | 新交互模式（如 WebSocket） | 实现 Writer 接口，在 server 包添加对应的 Hub 和 builder |
 | 新输出格式（如 WebSocket） | 实现 Writer 接口 |
 | 新存储后端（如 Redis） | 实现 Store 接口 |
-| 新消息类型 | 添加 ChunkType 常量，在 EventHandler 中处理 |
+| 新消息类型 | 添加 ChunkType 常量，在 Runtime.handleEvent() 中处理 |
 | 自定义 Agent 配置 | 使用 `agent.WithProjectRoot()`, `agent.WithSkillDir()` 等选项 |
 
 ## Agent 配置
