@@ -10,7 +10,7 @@ type Session struct {
 	ID        string
 	Writer    Writer                                         // agent 输出
 	OnInput   func(ctx context.Context) (*InputEvent, error) // CLI 场景：阻塞回调
-	Input     chan InputEvent                                // SSE 场景：channel 输入
+	InputChan chan InputEvent                                // SSE 场景：channel 输入
 	closed    chan struct{}                                  // SSE 场景：关闭信号
 	closeOnce sync.Once
 }
@@ -23,7 +23,7 @@ func New(sessionID string, writer Writer, withChan bool) *Session {
 		Writer: writer,
 	}
 	if withChan {
-		sess.Input = make(chan InputEvent, 1)
+		sess.InputChan = make(chan InputEvent, 1)
 		sess.closed = make(chan struct{})
 	}
 	return sess
@@ -36,7 +36,7 @@ func (s *Session) WaitInput(ctx context.Context) (*InputEvent, error) {
 	}
 
 	select {
-	case input := <-s.Input:
+	case input := <-s.InputChan:
 		return &input, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -62,8 +62,8 @@ func (s *Session) Close() {
 		if s.closed != nil {
 			close(s.closed)
 		}
-		if s.Input != nil {
-			close(s.Input)
+		if s.InputChan != nil {
+			close(s.InputChan)
 		}
 	})
 }

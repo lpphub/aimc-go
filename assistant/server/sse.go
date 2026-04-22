@@ -56,7 +56,7 @@ func (h *SSEHub) SubmitApproval(sessionID string, result *approval.Result) error
 	defer cancel()
 
 	select {
-	case s.Input <- session.InputEvent{
+	case s.InputChan <- session.InputEvent{
 		Type: session.InputApproval,
 		Data: result,
 	}:

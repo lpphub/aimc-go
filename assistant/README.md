@@ -43,7 +43,7 @@
 │                                                              │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │                       Session                          │  │
-│  │  - ID, Writer, Input, OnInput                         │  │
+│  │  - ID, Writer, InputChan, OnInput                        │  │
 │  │  - WaitInput() - 阻塞等待输入（审批/用户干预）         │  │
 │  │  - Write(), Close()                                   │  │
 │  └───────────────────────────────────────────────────────┘  │
@@ -112,7 +112,7 @@ Session 是一轮会话的交互容器，封装输出通道和输入通道。
 type Session struct {
     ID        string
     Writer    Writer              // 输出通道
-    Input     chan InputEvent     // withChan=true: channel 输入
+    InputChan chan InputEvent     // withChan=true: channel 输入
     OnInput   func(...)           // withChan=false: 阻塞回调
 }
 
@@ -204,7 +204,7 @@ HTTP POST /chat
   SSEHub.Acquire(sessionID, writer, flusher)
        │
        ▼
-     Session (Input: channel)
+     Session (InputChan: channel)
        │
        ▼
      Runtime.Run() (goroutine)
@@ -217,7 +217,7 @@ HTTP POST /approval
   SSEHub.SubmitApproval()
        │
        ▼
-     Input ←─── 解除 WaitInput 阻塞
+     InputChan ←─── 解除 WaitInput 阻塞
        │
        ▼
   Runtime.Resume() → 继续执行
