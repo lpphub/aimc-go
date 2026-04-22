@@ -98,7 +98,7 @@ func (r *Runtime) Run(ctx context.Context, sess *session.Session, query string) 
 	}
 
 	// 3. 运行 agent
-	_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: "🤖: "})
+	_ = sess.Emit(session.Event{Type: session.TypeMessage, Content: "🤖: "})
 	iter := r.Generate(ctx, conv.Messages, sess.ID)
 
 	// 4. 处理事件流
@@ -120,7 +120,7 @@ func (r *Runtime) Run(ctx context.Context, sess *session.Session, query string) 
 	}
 
 	// 7. 发送完成信号
-	_ = sess.Write(session.Chunk{Type: session.TypeDone})
+	_ = sess.Emit(session.Event{Type: session.TypeDone})
 
 	return nil
 }
@@ -153,7 +153,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 			return fmt.Errorf("unexpected interrupt info type: %T", ic.Info)
 		}
 
-		_ = sess.Write(session.Chunk{
+		_ = sess.Emit(session.Event{
 			Type:    session.TypeApproval,
 			Content: info.String(),
 			Meta:    map[string]any{"approval_id": approvalID, "tool_name": info.ToolName},
@@ -181,9 +181,9 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 
 		// 发送审批结果通知
 		if result.Approved {
-			_ = sess.Write(session.Chunk{Type: session.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
+			_ = sess.Emit(session.Event{Type: session.TypeApprovalRes, Content: "✔️ Approved, executing...\n"})
 		} else {
-			_ = sess.Write(session.Chunk{Type: session.TypeApprovalRes, Content: "✖️ Rejected\n"})
+			_ = sess.Emit(session.Event{Type: session.TypeApprovalRes, Content: "✖️ Rejected\n"})
 		}
 
 		// 恢复执行
@@ -208,7 +208,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 	}
 
 	// 发送完成信号
-	_ = sess.Write(session.Chunk{Type: session.TypeDone})
+	_ = sess.Emit(session.Event{Type: session.TypeDone})
 
 	return nil
 }
@@ -240,7 +240,7 @@ func (r *Runtime) drain(iter *adk.AsyncIterator[*adk.AgentEvent], sess *session.
 func (r *Runtime) handleEvent(event *adk.AgentEvent, sess *session.Session) (*schema.Message, *adk.InterruptInfo, error) {
 	// 1. 错误
 	if event.Err != nil {
-		_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
+		_ = sess.Emit(session.Event{Type: session.TypeMessage, Content: fmt.Sprintf("⚠️ %s\n", event.Err)})
 		if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
 			return nil, nil, nil
 		}
@@ -266,14 +266,14 @@ func (r *Runtime) handleAction(action *adk.AgentAction, sess *session.Session) *
 		return action.Interrupted
 	}
 	if action.TransferToAgent != nil {
-		_ = sess.Write(session.Chunk{
+		_ = sess.Emit(session.Event{
 			Type:    session.TypeMessage,
 			Content: fmt.Sprintf("➡️ transfer to %s\n", action.TransferToAgent.DestAgentName),
 		})
 		return nil
 	}
 	if action.Exit {
-		_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: "🏁 exit\n"})
+		_ = sess.Emit(session.Event{Type: session.TypeMessage, Content: "🏁 exit\n"})
 	}
 	return nil
 }
@@ -286,7 +286,7 @@ func (r *Runtime) handleMessage(mv *adk.MessageVariant, sess *session.Session) (
 		if err != nil {
 			return nil, nil, err
 		}
-		_ = sess.Write(session.Chunk{
+		_ = sess.Emit(session.Event{
 			Type:    session.TypeToolResult,
 			Content: fmt.Sprintf("✅ [tool result] -> %s\t%s\n", mv.ToolName, truncate(result.Content, 200)),
 		})
@@ -327,7 +327,7 @@ func (r *Runtime) handleStreamingMessage(mv *adk.MessageVariant, sess *session.S
 
 		if frame.Content != "" {
 			contentBuf.WriteString(frame.Content)
-			if err := sess.Write(session.Chunk{Type: session.TypeAssistant, Content: frame.Content}); err != nil {
+			if err := sess.Emit(session.Event{Type: session.TypeAssistant, Content: frame.Content}); err != nil {
 				return nil, err
 			}
 		}
@@ -336,10 +336,10 @@ func (r *Runtime) handleStreamingMessage(mv *adk.MessageVariant, sess *session.S
 		}
 	}
 
-	_ = sess.Write(session.Chunk{Type: session.TypeMessage, Content: "\n"})
+	_ = sess.Emit(session.Event{Type: session.TypeMessage, Content: "\n"})
 
 	for _, tc := range toolCalls {
-		_ = sess.Write(session.Chunk{
+		_ = sess.Emit(session.Event{
 			Type:    session.TypeToolCall,
 			Content: fmt.Sprintf("🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
 		})
@@ -357,10 +357,10 @@ func (r *Runtime) handleRegularMessage(mv *adk.MessageVariant, sess *session.Ses
 	if mv.Message == nil {
 		return nil
 	}
-	_ = sess.Write(session.Chunk{Type: session.TypeAssistant, Content: mv.Message.Content})
+	_ = sess.Emit(session.Event{Type: session.TypeAssistant, Content: mv.Message.Content})
 
 	for _, tc := range mv.Message.ToolCalls {
-		_ = sess.Write(session.Chunk{
+		_ = sess.Emit(session.Event{
 			Type:    session.TypeToolCall,
 			Content: fmt.Sprintf("\n🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
 		})

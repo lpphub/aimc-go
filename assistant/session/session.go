@@ -8,19 +8,19 @@ import (
 // Session 运行时 I/O 上下文（双向交互通道）
 type Session struct {
 	ID        string
-	Writer    Writer                                         // agent 输出
+	Sink      Sink                                            // agent 输出
 	OnInput   func(ctx context.Context) (*InputEvent, error) // CLI 场景：阻塞回调
-	InputChan chan InputEvent                                // SSE 场景：channel 输入
-	closed    chan struct{}                                  // SSE 场景：关闭信号
+	InputChan chan InputEvent                                 // SSE 场景：channel 输入
+	closed    chan struct{}                                   // SSE 场景：关闭信号
 	closeOnce sync.Once
 }
 
 // New 创建 Session
 // withChan=true 使用 channel 输入（SSE/WebSocket），withChan=false 使用阻塞回调 OnInput（CLI）
-func New(sessionID string, writer Writer, withChan bool) *Session {
+func New(sessionID string, sink Sink, withChan bool) *Session {
 	sess := &Session{
-		ID:     sessionID,
-		Writer: writer,
+		ID:   sessionID,
+		Sink: sink,
 	}
 	if withChan {
 		sess.InputChan = make(chan InputEvent, 1)
@@ -43,10 +43,10 @@ func (s *Session) WaitInput(ctx context.Context) (*InputEvent, error) {
 	}
 }
 
-// Write 输出 Chunk
-func (s *Session) Write(chunk Chunk) error {
-	if s.Writer != nil {
-		return s.Writer.Write(chunk)
+// Emit 发送事件
+func (s *Session) Emit(event Event) error {
+	if s.Sink != nil {
+		return s.Sink.Handle(event)
 	}
 	return nil
 }
