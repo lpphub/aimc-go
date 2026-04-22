@@ -44,7 +44,7 @@ func RunCLI() {
 
 // NewCLI 创建 CLI 场景的 Session
 func NewCLI(sessionID string, writer session.Writer, scanner *bufio.Scanner) *session.Session {
-	sess := session.New(sessionID, writer)
+	sess := session.New(sessionID, writer, false)
 
 	sess.OnInput = func(ctx context.Context) (*session.InputEvent, error) {
 		if !scanner.Scan() {

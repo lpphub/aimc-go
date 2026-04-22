@@ -9,25 +9,23 @@ import (
 type Session struct {
 	ID        string
 	Writer    Writer                                         // agent 输出
-	Input     chan InputEvent                                // SSE 场景：channel 输入
 	OnInput   func(ctx context.Context) (*InputEvent, error) // CLI 场景：阻塞回调
-	closed    chan struct{}                                  // 关闭信号（SSE 场景）
+	Input     chan InputEvent                                // SSE 场景：channel 输入
+	closed    chan struct{}                                  // SSE 场景：关闭信号
 	closeOnce sync.Once
 }
 
-// New 创建 Session（只初始化公共字段）
-func New(sessionID string, writer Writer) *Session {
-	return &Session{
+// New 创建 Session
+// withChan=true 使用 channel 输入（SSE/WebSocket），withChan=false 使用阻塞回调 OnInput（CLI）
+func New(sessionID string, writer Writer, withChan bool) *Session {
+	sess := &Session{
 		ID:     sessionID,
 		Writer: writer,
 	}
-}
-
-// NewSSE 创建 SSE 场景的 Session
-func NewSSE(sessionID string, writer Writer) *Session {
-	sess := New(sessionID, writer)
-	sess.Input = make(chan InputEvent, 1)
-	sess.closed = make(chan struct{})
+	if withChan {
+		sess.Input = make(chan InputEvent, 1)
+		sess.closed = make(chan struct{})
+	}
 	return sess
 }
 

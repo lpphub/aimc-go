@@ -32,7 +32,7 @@ func NewSSEHub() *SSEHub {
 
 // Acquire 获取或创建 Session，如果会话忙则返回错误
 func (h *SSEHub) Acquire(ctx context.Context, sessionID string, w http.ResponseWriter, flusher http.Flusher) (*session.Session, error) {
-	sess := session.NewSSE(sessionID, session.NewSSEWriter(ctx, w, flusher))
+	sess := session.New(sessionID, session.NewSSEWriter(ctx, w, flusher), true)
 
 	// sync.Map 的 LoadOrStore 是原子操作
 	actual, loaded := h.sessions.LoadOrStore(sessionID, sess)

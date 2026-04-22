@@ -43,7 +43,7 @@
 │                                                              │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │                       Session                          │  │
-│  │  - ID, Writer, InputChan, OnInput                     │  │
+│  │  - ID, Writer, Input, OnInput                         │  │
 │  │  - WaitInput() - 阻塞等待输入（审批/用户干预）         │  │
 │  │  - Write(), Close()                                   │  │
 │  └───────────────────────────────────────────────────────┘  │
@@ -75,7 +75,7 @@ assistant/
 │   └── runtime.go             # NewRuntime 创建
 │
 ├── session/                   # 数据结构层
-│   ├── session.go             # Session + New/NewSSE + 方法
+│   ├── session.go             # Session + New(withChan) + 方法
 │   ├── input.go               # InputEvent + InputType
 │   ├── chunk.go               # Chunk + ChunkType
 │   └── writer.go              # Writer 接口 + 实现
@@ -112,9 +112,15 @@ Session 是一轮会话的交互容器，封装输出通道和输入通道。
 type Session struct {
     ID        string
     Writer    Writer              // 输出通道
-    InputChan chan InputEvent     // SSE: channel 输入
-    OnInput   func(...)           // CLI: 阻塞回调
+    Input     chan InputEvent     // withChan=true: channel 输入
+    OnInput   func(...)           // withChan=false: 阻塞回调
 }
+
+// withChan=true: channel 输入（SSE/WebSocket）
+session.New(sessionID, writer, true)
+
+// withChan=false: 阻塞回调 OnInput（CLI）
+session.New(sessionID, writer, false)
 ```
 
 **关键方法：**
@@ -166,25 +172,6 @@ type Chunk struct {
 | `TypeError` | 错误信息 |
 | `TypeDone` | 对话结束信号 |
 
-### SessionBuilder（交互层抽象）
-
-SessionBuilder 让交互层决定如何创建 Session。
-
-**CLI 场景：**
-```go
-builder := runtime.NewCLISessionBuilder(scanner)
-session, _ := builder.Build(ctx, sessionID)
-// OnInput 注册为阻塞读 stdin
-```
-
-**SSE 场景：**
-```go
-builder := runtime.NewSSESessionBuilder()
-session, _ := builder.Build(ctx, sessionID, w, flusher)
-// 不注册 OnInput，使用 InputChan
-builder.SubmitApproval(sessionID, result)  // HTTP 回调写入
-```
-
 ## 数据流
 
 ### CLI 流程
@@ -193,7 +180,7 @@ builder.SubmitApproval(sessionID, result)  // HTTP 回调写入
 用户输入 (stdin)
        │
        ▼
-  session.NewCLI(sessionID, StdoutWriter, scanner)
+  server.NewCLI(sessionID, StdoutWriter, scanner)
        │
        ▼
      Session (OnInput: 读 stdin)
@@ -203,7 +190,7 @@ builder.SubmitApproval(sessionID, result)  // HTTP 回调写入
        │
        ├──→ EventHandler.Drain() → session.Write() → StdoutWriter
        │
-       └──→ handleInterrupt() → session.WaitInput() → OnInput()
+       └→ handleInterrupt() → session.WaitInput() → OnInput()
        
      返回循环等待下一轮输入
 ```
@@ -217,7 +204,7 @@ HTTP POST /chat
   SSEHub.Acquire(sessionID, writer, flusher)
        │
        ▼
-     Session (InputChan: channel)
+     Session (Input: channel)
        │
        ▼
      Runtime.Run() (goroutine)
@@ -230,7 +217,7 @@ HTTP POST /approval
   SSEHub.SubmitApproval()
        │
        ▼
-     InputChan ←─── 解除 WaitInput 阻塞
+     Input ←─── 解除 WaitInput 阻塞
        │
        ▼
   Runtime.Resume() → 继续执行
@@ -252,7 +239,7 @@ func RunCLI() {
     scanner := bufio.NewScanner(os.Stdin)
     sessionID := uuid.New().String()
     
-    sess := session.NewCLI(sessionID, session.NewStdoutWriter(), scanner)
+    sess := NewCLI(sessionID, session.NewStdoutWriter(), scanner)
     
     for {
         fmt.Print("👤: ")
