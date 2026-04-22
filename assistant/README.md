@@ -17,8 +17,8 @@
 │  ┌─────────────────┐              ┌─────────────────────┐    │
 │  │   NewCLI()      │              │    SSEHub           │    │
 │  │  - OnInput 回调 │              │  - Acquire/Release  │    │
-│  │  - StdoutWriter │              │  - SubmitApproval() │    │
-│  └─────────────────┘              │  - SSEWriter        │    │
+│  │  - StdoutSink │              │  - SubmitApproval() │    │
+│  └─────────────────┘              │  - SSESink          │    │
 │           │                        └─────────────────────┘    │
 │           │                                 │                │
 └───────────┼─────────────────────────────────┼────────────────┘
@@ -43,9 +43,9 @@
 │                                                              │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │                       Session                          │  │
-│  │  - ID, Writer, InputChan, OnInput                        │  │
+│  │  - ID, Sink, InputChan, OnInput                        │  │
 │  │  - WaitInput() - 阻塞等待输入（审批/用户干预）         │  │
-│  │  - Write(), Close()                                   │  │
+│  │  - Emit(), Close()                                   │  │
 │  └───────────────────────────────────────────────────────┘  │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
@@ -54,7 +54,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                       Infrastructure Layer                   │
 │                                                              │
-│  Writer: StdoutWriter, SSEWriter                             │
+│  Sink: StdoutSink, SSESink                                   │
 │  Store: JSONLStore                                           │
 │  Approval: Info, Result                                      │
 │  Agent: agent.New()                                          │
@@ -77,8 +77,8 @@ assistant/
 ├── session/                   # 数据结构层
 │   ├── session.go             # Session + New(withChan) + 方法
 │   ├── input.go               # InputEvent + InputType
-│   ├── chunk.go               # Chunk + ChunkType
-│   └── writer.go              # Writer 接口 + 实现
+│   ├── event.go               # Event + EventType
+│   └── sink.go                # Sink 接口 + 实现
 │
 ├── runtime/                   # 运行时核心
 │   └── runtime.go             # Runtime 结构 + Run/Resume + 事件处理方法
@@ -110,21 +110,21 @@ Session 是一轮会话的交互容器，封装输出通道和输入通道。
 ```go
 type Session struct {
     ID        string
-    Writer    Writer              // 输出通道
+    Sink      Sink               // 输出通道
     InputChan chan InputEvent     // withChan=true: channel 输入
     OnInput   func(...)           // withChan=false: 阻塞回调
 }
 
 // withChan=true: channel 输入（SSE/WebSocket）
-session.New(sessionID, writer, true)
+session.New(sessionID, sink, true)
 
 // withChan=false: 阻塞回调 OnInput（CLI）
-session.New(sessionID, writer, false)
+session.New(sessionID, sink, false)
 ```
 
 **关键方法：**
 - `WaitInput(ctx)` - 阻塞等待输入（审批结果或用户干预）
-- `Write(chunk)` - 输出消息片段
+- `Emit(event)` - 发送输出事件
 - `Close()` - 关闭会话（线程安全）
 
 ### Runtime（服务层核心）
@@ -143,23 +143,23 @@ type Runtime struct {
 - `Run(ctx, session, query)` - 执行一轮对话
 - `Resume(ctx, session, checkpointID, resumeData)` - 恢复中断的对话
 
-### Writer（单向输出接口）
+### Sink（事件输出接口）
 
-Writer 是单向输出接口，实现必须是并发安全的。
+Sink 是事件输出接口，遵循 Go Handler 惯例，实现必须是并发安全的。
 
 ```go
-type Writer interface {
-    Write(Chunk) error
+type Sink interface {
+    Handle(Event) error
 }
 
-type Chunk struct {
-    Type    ChunkType      `json:"type"`
+type Event struct {
+    Type    EventType      `json:"type"`
     Content string         `json:"content"`
     Meta    map[string]any `json:"meta,omitempty"`
 }
 ```
 
-**ChunkType 类型：**
+**EventType 类型：**
 | 类型 | 说明 |
 |------|------|
 | `TypeAssistant` | AI 助手回复内容 |
@@ -179,7 +179,7 @@ type Chunk struct {
 用户输入 (stdin)
        │
        ▼
-  server.NewCLI(sessionID, StdoutWriter, scanner)
+  server.NewCLI(sessionID, StdoutSink, scanner)
        │
        ▼
      Session (OnInput: 读 stdin)
@@ -187,7 +187,7 @@ type Chunk struct {
        ▼
      Runtime.Run(ctx, session, query)
        │
-       ├──→ Runtime.drain() → session.Write() → StdoutWriter
+       ├──→ Runtime.drain() → session.Emit() → StdoutSink
        │
        └→ handleInterrupt() → session.WaitInput() → OnInput()
        
@@ -200,7 +200,7 @@ type Chunk struct {
 HTTP POST /chat
        │
        ▼
-  SSEHub.Acquire(sessionID, writer, flusher)
+  SSEHub.Acquire(sessionID, sink, flusher)
        │
        ▼
      Session (InputChan: channel)
@@ -208,7 +208,7 @@ HTTP POST /chat
        ▼
      Runtime.Run() (goroutine)
        │
-       └──→ session.Write() → SSEWriter → SSE 推送
+       └──→ session.Emit() → SSESink → SSE 推送
 
 HTTP POST /approval
        │
@@ -238,7 +238,7 @@ func RunCLI() {
     scanner := bufio.NewScanner(os.Stdin)
     sessionID := uuid.New().String()
     
-    sess := NewCLI(sessionID, session.NewStdoutWriter(), scanner)
+    sess := NewCLI(sessionID, session.NewStdoutSink(), scanner)
     
     for {
         fmt.Print("👤: ")
@@ -297,10 +297,10 @@ func (m *SSEModule) approval(c *gin.Context) {
 
 | 扩展需求 | 实现方式 |
 |---------|---------|
-| 新交互模式（如 WebSocket） | 实现 Writer 接口，在 server 包添加对应的 Hub 和 builder |
-| 新输出格式（如 WebSocket） | 实现 Writer 接口 |
+| 新交互模式（如 WebSocket） | 实现 Sink 接口，在 server 包添加对应的 Hub 和 builder |
+| 新输出格式（如 WebSocket） | 实现 Sink 接口 |
 | 新存储后端（如 Redis） | 实现 Store 接口 |
-| 新消息类型 | 添加 ChunkType 常量，在 Runtime.handleEvent() 中处理 |
+| 新消息类型 | 添加 EventType 常量，在 Runtime.handleEvent() 中处理 |
 | 自定义 Agent 配置 | 使用 `agent.WithProjectRoot()`, `agent.WithSkillDir()` 等选项 |
 
 ## Agent 配置
@@ -333,7 +333,7 @@ ag, _ := agent.New(ctx,
 ## 设计原则
 
 1. **Session = 会话**，不是单轮对话。Session 在多轮对话期间保持。
-2. **Writer 单向简单**，不承担审批逻辑，只做输出。
+2. **Sink 单向简单**，不承担审批逻辑，只做输出。
 3. **Runtime 统一生命周期**，CLI 和 SSE 差异封装在 server 包。
-4. **并发安全**，Writer 实现必须线程安全，Session.Close 使用 sync.Once。
+4. **并发安全**，Sink 实现必须线程安全，Session.Close 使用 sync.Once。
 5. **包职责清晰**，session 包只定义数据结构，server 包管理入口和连接。
