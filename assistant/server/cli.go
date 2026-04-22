@@ -1,6 +1,7 @@
 package server
 
 import (
+	"aimc-go/assistant/approval"
 	"aimc-go/assistant/session"
 	"bufio"
 	"context"
@@ -23,7 +24,7 @@ func RunCLI() {
 	scanner := bufio.NewScanner(os.Stdin)
 	sessionID := uuid.New().String()
 
-	sess := session.NewCLI(sessionID, session.NewStdoutWriter(), scanner)
+	sess := NewCLI(sessionID, session.NewStdoutWriter(), scanner)
 
 	for {
 		fmt.Print("👤: ")
@@ -39,4 +40,23 @@ func RunCLI() {
 			fmt.Fprintln(os.Stderr, err)
 		}
 	}
+}
+
+// NewCLI 创建 CLI 场景的 Session
+func NewCLI(sessionID string, writer session.Writer, scanner *bufio.Scanner) *session.Session {
+	sess := session.New(sessionID, writer)
+
+	sess.OnInput = func(ctx context.Context) (*session.InputEvent, error) {
+		if !scanner.Scan() {
+			return nil, scanner.Err()
+		}
+		response := strings.TrimSpace(scanner.Text())
+		approved := response == "y" || response == "yes"
+		return &session.InputEvent{
+			Type: session.InputApproval,
+			Data: &approval.Result{Approved: approved},
+		}, nil
+	}
+
+	return sess
 }

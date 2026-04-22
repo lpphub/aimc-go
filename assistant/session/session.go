@@ -5,20 +5,6 @@ import (
 	"sync"
 )
 
-// InputType 输入事件类型
-type InputType string
-
-const (
-	InputApproval    InputType = "approval"
-	InputUserMessage InputType = "user_message"
-)
-
-// InputEvent 输入事件
-type InputEvent struct {
-	Type InputType
-	Data any
-}
-
 // Session 运行时 I/O 上下文（双向交互通道）
 type Session struct {
 	ID        string
@@ -35,6 +21,14 @@ func New(sessionID string, writer Writer) *Session {
 		ID:     sessionID,
 		Writer: writer,
 	}
+}
+
+// NewSSE 创建 SSE 场景的 Session
+func NewSSE(sessionID string, writer Writer) *Session {
+	sess := New(sessionID, writer)
+	sess.Input = make(chan InputEvent, 1)
+	sess.closed = make(chan struct{})
+	return sess
 }
 
 // WaitInput 阻塞等待输入
