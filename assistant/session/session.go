@@ -8,10 +8,10 @@ import (
 // Session 运行时 I/O 上下文（双向交互通道）
 type Session struct {
 	ID        string
-	Sink      Sink                                            // agent 输出
+	Sink      Sink                                           // agent 输出
 	OnInput   func(ctx context.Context) (*InputEvent, error) // CLI 场景：阻塞回调
-	InputChan chan InputEvent                                 // SSE 场景：channel 输入
-	closed    chan struct{}                                   // SSE 场景：关闭信号
+	InputChan chan InputEvent                                // SSE 场景：channel 输入
+	closed    chan struct{}                                  // SSE 场景：关闭信号
 	closeOnce sync.Once
 }
 

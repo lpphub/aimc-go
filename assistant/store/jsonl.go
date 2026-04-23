@@ -19,9 +19,16 @@ import (
 // DefaultCacheSize 默认缓存容量
 const DefaultCacheSize = 128
 
+// conversation 内部结构体（用于缓存和文件存储）
+type conversation struct {
+	ID        string
+	CreatedAt time.Time
+	Messages  []*schema.Message
+}
+
 type JSONLStore struct {
 	Dir       string
-	cache     *lru.Cache[string, *Conversation]
+	cache     *lru.Cache[string, *conversation]
 	convLocks sync.Map // conversationID -> *sync.Mutex (细粒度锁)
 }
 
@@ -32,7 +39,7 @@ func NewJSONLStore(dir string) *JSONLStore {
 		log.Printf("warn: failed to create store dir: %v", err)
 	}
 
-	cache, _ := lru.New[string, *Conversation](DefaultCacheSize)
+	cache, _ := lru.New[string, *conversation](DefaultCacheSize)
 
 	return &JSONLStore{
 		Dir:   dir,
@@ -46,85 +53,86 @@ func (s *JSONLStore) getConvLock(id string) *sync.Mutex {
 	return lock.(*sync.Mutex)
 }
 
-// GetOrCreate 返回 conversation，不存在则创建
-func (s *JSONLStore) GetOrCreate(_ context.Context, conversationID string) (*Conversation, error) {
+// Get 获取历史消息，不存在返回空切片
+func (s *JSONLStore) Get(_ context.Context, sessionID string) ([]*schema.Message, error) {
 	// 1. 快速缓存检查（无锁读取）
-	if conv, ok := s.cache.Get(conversationID); ok {
-		return conv, nil
+	if conv, ok := s.cache.Get(sessionID); ok {
+		return conv.Messages, nil
 	}
 
 	// 2. 获取该 conversation 的独立锁
-	lock := s.getConvLock(conversationID)
+	lock := s.getConvLock(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	// 3. 再次检查缓存（double-check，避免重复加载）
-	if conv, ok := s.cache.Get(conversationID); ok {
-		return conv, nil
+	// 3. 再次检查缓存（double-check）
+	if conv, ok := s.cache.Get(sessionID); ok {
+		return conv.Messages, nil
 	}
 
-	// 4. 检查文件
-	filePath := filepath.Join(s.Dir, conversationID+".jsonl")
-
-	var conv *Conversation
-
+	// 4. 检查文件是否存在
+	filePath := filepath.Join(s.Dir, sessionID+".jsonl")
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		// 不存在 → 创建新 conversation
-		now := time.Now().UTC()
-		conv = &Conversation{
-			ID:        conversationID,
-			CreatedAt: now,
-			Messages:  make([]*schema.Message, 0),
-		}
-
-		// 写入 header
-		header := map[string]interface{}{
-			"type":       "conversation",
-			"id":         conversationID,
-			"created_at": now,
-		}
-		data, err := json.Marshal(header)
-		if err != nil {
-			return nil, err
-		}
-		if err = os.WriteFile(filePath, append(data, '\n'), 0o644); err != nil {
-			return nil, err
-		}
-	} else {
-		// 存在 → 从文件加载
-		conv, err = s.loadConversation(filePath)
-		if err != nil {
-			return nil, err
-		}
+		return nil, nil // 不存在返回空切片
 	}
 
-	// 5. 加入缓存
-	s.cache.Add(conversationID, conv)
+	// 5. 从文件加载
+	conv, err := s.loadConversation(filePath)
+	if err != nil {
+		return nil, err
+	}
 
-	return conv, nil
+	// 6. 加入缓存
+	s.cache.Add(sessionID, conv)
+
+	return conv.Messages, nil
 }
 
-// Append 追加一条或多条 message（支持批量写入）
-func (s *JSONLStore) Append(_ context.Context, conversationID string, messages ...*schema.Message) error {
+// Append 追加消息，自动创建（如果不存在）
+func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*schema.Message) error {
 	// 1. 获取该 conversation 的独立锁
-	lock := s.getConvLock(conversationID)
+	lock := s.getConvLock(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
 
 	// 2. 获取 conversation（从缓存或文件）
-	conv, ok := s.cache.Get(conversationID)
+	conv, ok := s.cache.Get(sessionID)
 	if !ok {
-		filePath := filepath.Join(s.Dir, conversationID+".jsonl")
-		var err error
-		conv, err = s.loadConversation(filePath)
-		if err != nil {
-			return fmt.Errorf("load conversation: %w", err)
+		filePath := filepath.Join(s.Dir, sessionID+".jsonl")
+		// 文件不存在则创建新的 conversation
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			now := time.Now().UTC()
+			conv = &conversation{
+				ID:        sessionID,
+				CreatedAt: now,
+				Messages:  make([]*schema.Message, 0),
+			}
+			// 写入 header
+			header := map[string]interface{}{
+				"type":       "conversation",
+				"id":         sessionID,
+				"created_at": now,
+			}
+			data, err := json.Marshal(header)
+			if err != nil {
+				return err
+			}
+			if err = os.WriteFile(filePath, append(data, '\n'), 0o644); err != nil {
+				return err
+			}
+		} else {
+			// 文件存在则加载
+			var err error
+			conv, err = s.loadConversation(filePath)
+			if err != nil {
+				return fmt.Errorf("load conversation: %w", err)
+			}
 		}
-		s.cache.Add(conversationID, conv)
+		s.cache.Add(sessionID, conv)
 	}
 
 	// 3. 追加到文件
-	filePath := filepath.Join(s.Dir, conversationID+".jsonl")
+	filePath := filepath.Join(s.Dir, sessionID+".jsonl")
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
@@ -153,7 +161,7 @@ func (s *JSONLStore) Append(_ context.Context, conversationID string, messages .
 }
 
 // loadConversation 从 JSONL 文件加载 conversation
-func (s *JSONLStore) loadConversation(filePath string) (*Conversation, error) {
+func (s *JSONLStore) loadConversation(filePath string) (*conversation, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -175,7 +183,7 @@ func (s *JSONLStore) loadConversation(filePath string) (*Conversation, error) {
 		return nil, fmt.Errorf("bad conversation header in %s: %w", filePath, err)
 	}
 
-	conv := &Conversation{
+	conv := &conversation{
 		ID:        header.ID,
 		CreatedAt: header.CreatedAt,
 		Messages:  make([]*schema.Message, 0),

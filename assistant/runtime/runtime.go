@@ -86,20 +86,20 @@ func (r *Runtime) Events(ctx context.Context, messages []*schema.Message, checkp
 
 // Run 执行一轮对话（完整流程）
 func (r *Runtime) Run(ctx context.Context, sess *session.Session, query string) error {
-	// 1. 获取会话
-	conv, err := r.store.GetOrCreate(ctx, sess.ID)
-	if err != nil {
-		return fmt.Errorf("get conversation: %w", err)
-	}
-
-	// 2. 存储用户消息
+	// 1. 存储用户消息
 	if err := r.store.Append(ctx, sess.ID, schema.UserMessage(query)); err != nil {
 		return fmt.Errorf("append user message: %w", err)
 	}
 
+	// 2. 获取完整消息列表（含当前用户消息）
+	history, err := r.store.Get(ctx, sess.ID)
+	if err != nil {
+		return fmt.Errorf("get history: %w", err)
+	}
+
 	// 3. 运行 agent
 	_ = sess.Emit(session.Event{Type: session.TypeMessage, Content: "🤖: "})
-	iter := r.Generate(ctx, conv.Messages, sess.ID)
+	iter := r.Generate(ctx, history, sess.ID)
 
 	// 4. 处理事件流
 	messages, interruptInfo, err := r.drain(iter, sess)

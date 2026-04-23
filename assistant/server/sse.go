@@ -136,7 +136,7 @@ func (m *SSEModule) chat(c *gin.Context) {
 		err := m.rt.Run(ctx, sess, req.Query)
 		if err != nil {
 			sess.Emit(session.Event{
-				Type:    session.TypeError,
+				Type:    session.TypeMessage,
 				Content: err.Error(),
 			})
 		}

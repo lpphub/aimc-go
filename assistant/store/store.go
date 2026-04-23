@@ -2,20 +2,14 @@ package store
 
 import (
 	"context"
-	"time"
 
 	"github.com/cloudwego/eino/schema"
 )
 
-type Conversation struct {
-	ID        string
-	CreatedAt time.Time
-	Messages  []*schema.Message
-}
-
+// Store 消息存储接口
 type Store interface {
-	//GetOrCreate 获取 conversation，不存在则创建
-	GetOrCreate(ctx context.Context, conversationID string) (*Conversation, error)
-	//Append 追加一条或多条 message
-	Append(ctx context.Context, conversationID string, messages ...*schema.Message) error
+	// Get 获取历史消息
+	Get(ctx context.Context, sessionID string) ([]*schema.Message, error)
+	// Append 追加消息，自动创建（如果不存在）
+	Append(ctx context.Context, sessionID string, messages ...*schema.Message) error
 }

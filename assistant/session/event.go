@@ -10,7 +10,6 @@ const (
 	TypeMessage     EventType = "message"
 	TypeApproval    EventType = "approval"        // 审批请求
 	TypeApprovalRes EventType = "approval_result" // 审批结果
-	TypeError       EventType = "error"           // 错误信息
 	TypeDone        EventType = "done"            // 对话结束信号
 )
 
