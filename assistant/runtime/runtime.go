@@ -25,17 +25,27 @@ func WithStore(s store.Store) RuntimeOption {
 	}
 }
 
+// WithMaxRounds 设置保留的最大轮数，轮数按用户消息计数。
+// 设为 <=0 表示不裁剪，保留全部历史。
+func WithMaxRounds(n int) RuntimeOption {
+	return func(r *Runtime) {
+		r.maxRounds = n
+	}
+}
+
 // Runtime 服务层核心，管理完整的对话生命周期
 type Runtime struct {
 	runner          *adk.Runner
 	store           store.Store
 	checkpointStore adk.CheckPointStore
+	maxRounds       int // 保留最近 N 轮对话（按 user 消息计），<=0 表示不裁剪
 }
 
 // New 创建 Runtime
 func New(agent adk.Agent, opts ...RuntimeOption) (*Runtime, error) {
 	r := &Runtime{
 		checkpointStore: adkstore.NewInMemoryStore(), // 默认内存 checkpoint
+		maxRounds:       25,                          // 默认保留 25 轮
 	}
 
 	for _, opt := range opts {
@@ -96,6 +106,9 @@ func (r *Runtime) Run(ctx context.Context, sess *session.Session, query string) 
 	if err != nil {
 		return fmt.Errorf("get history: %w", err)
 	}
+
+	// 2b. 裁剪历史到最近 N 轮
+	history = trimRounds(history, r.maxRounds)
 
 	// 3. 运行 agent
 	_ = sess.Emit(session.Event{Type: session.TypeMessage, Content: "🤖: "})
@@ -366,6 +379,33 @@ func (r *Runtime) handleRegularMessage(mv *adk.MessageVariant, sess *session.Ses
 		})
 	}
 	return mv.Message
+}
+
+// trimRounds 只保留最近 maxRounds 轮对话（从末尾向前数 user 消息）
+func trimRounds(history []*schema.Message, maxRounds int) []*schema.Message {
+	if maxRounds <= 0 || len(history) == 0 {
+		return history
+	}
+
+	keepStart := 0
+	userCount := 0
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role == schema.User {
+			userCount++
+			if userCount == maxRounds {
+				keepStart = i
+				break
+			}
+		}
+	}
+
+	if keepStart == 0 {
+		return history
+	}
+
+	result := make([]*schema.Message, len(history)-keepStart)
+	copy(result, history[keepStart:])
+	return result
 }
 
 // truncate 截断字符串
