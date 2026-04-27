@@ -95,9 +95,9 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 	lock.Lock()
 	defer lock.Unlock()
 
-	// 2. 获取 conversation（从缓存或文件）
-	conv, ok := s.cache.Get(sessionID)
-	if !ok {
+	// 2. 获取 conversation（从缓存或文件），但不加入缓存
+	conv, cached := s.cache.Get(sessionID)
+	if !cached {
 		filePath := filepath.Join(s.Dir, sessionID+".jsonl")
 		// 文件不存在则创建新的 conversation
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -128,10 +128,9 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 				return fmt.Errorf("load conversation: %w", err)
 			}
 		}
-		s.cache.Add(sessionID, conv)
 	}
 
-	// 3. 追加到文件
+	// 3. 先写文件（全部写入并 flush 成功后，才更新缓存）
 	filePath := filepath.Join(s.Dir, sessionID+".jsonl")
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -141,10 +140,6 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 
 	writer := bufio.NewWriter(f)
 	for _, msg := range messages {
-		// 更新缓存
-		conv.Messages = append(conv.Messages, msg)
-
-		// 写入文件
 		data, err := json.Marshal(msg)
 		if err != nil {
 			return fmt.Errorf("marshal message: %w", err)
@@ -157,7 +152,18 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 		}
 	}
 
-	return writer.Flush()
+	// flush 落盘后才算写入成功
+	if err = writer.Flush(); err != nil {
+		return err
+	}
+
+	// 4. 文件写入成功，再更新缓存
+	conv.Messages = append(conv.Messages, messages...)
+	if !cached {
+		s.cache.Add(sessionID, conv)
+	}
+
+	return nil
 }
 
 // loadConversation 从 JSONL 文件加载 conversation

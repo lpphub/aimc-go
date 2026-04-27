@@ -22,7 +22,7 @@ func SetupMiddlewares(ctx context.Context, chatModel model.BaseChatModel, cfg Co
 	}
 
 	middlewares = append(middlewares, NewApprovalMiddleware("execute"))
-	middlewares = append(middlewares, &safeToolMiddleware{})
+	middlewares = append(middlewares, &toolRecoveryMiddleware{})
 
 	return middlewares, nil
 }
