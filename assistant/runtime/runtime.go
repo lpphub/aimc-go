@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"aimc-go/assistant/approval"
 	"aimc-go/assistant/session"
 	"aimc-go/assistant/store"
 	"context"
@@ -133,7 +132,7 @@ func (r *Runtime) Run(ctx context.Context, sess *session.Session, query string) 
 	}
 
 	// 7. 发送完成信号
-	_ = sess.Emit(session.Event{Type: session.TypeDone})
+	_ = sess.Emit(session.Event{Type: session.TypeMessage, Content: "\n"})
 
 	return nil
 }
@@ -161,7 +160,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 
 		// 发送审批请求
 		approvalID := ic.ID
-		info, ok := ic.Info.(*approval.Info)
+		info, ok := ic.Info.(*session.ApprovalInfo)
 		if !ok {
 			return fmt.Errorf("unexpected interrupt info type: %T", ic.Info)
 		}
@@ -182,7 +181,7 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 			return fmt.Errorf("unexpected input type: %s", input.Type)
 		}
 
-		result, ok := input.Data.(*approval.Result)
+		result, ok := input.Data.(*session.ApprovalResult)
 		if !ok {
 			return fmt.Errorf("unexpected approval result type: %T", input.Data)
 		}
@@ -219,10 +218,6 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 			return r.handleInterrupt(ctx, sess, newInterrupt)
 		}
 	}
-
-	// 发送完成信号
-	_ = sess.Emit(session.Event{Type: session.TypeDone})
-
 	return nil
 }
 
@@ -324,7 +319,8 @@ func (r *Runtime) handleStreamingMessage(mv *adk.MessageVariant, sess *session.S
 	mv.MessageStream.SetAutomaticClose()
 
 	var contentBuf strings.Builder
-	var toolCalls []schema.ToolCall
+	var reasoningBuf strings.Builder
+	var toolCallMsgs []*schema.Message
 
 	for {
 		frame, err := mv.MessageStream.Recv()
@@ -340,28 +336,37 @@ func (r *Runtime) handleStreamingMessage(mv *adk.MessageVariant, sess *session.S
 
 		if frame.Content != "" {
 			contentBuf.WriteString(frame.Content)
-			if err := sess.Emit(session.Event{Type: session.TypeAssistant, Content: frame.Content}); err != nil {
-				return nil, err
-			}
+			_ = sess.Emit(session.Event{Type: session.TypeAssistant, Content: frame.Content})
 		}
+
+		if frame.ReasoningContent != "" {
+			reasoningBuf.WriteString(frame.ReasoningContent)
+			_ = sess.Emit(session.Event{Type: session.TypeReasoning, Content: frame.ReasoningContent})
+		}
+
 		if len(frame.ToolCalls) > 0 {
-			toolCalls = append(toolCalls, frame.ToolCalls...)
+			for _, tc := range frame.ToolCalls {
+				toolCallMsgs = append(toolCallMsgs, &schema.Message{
+					Role:      mv.Role,
+					ToolCalls: []schema.ToolCall{tc},
+				})
+			}
 		}
 	}
 
-	_ = sess.Emit(session.Event{Type: session.TypeMessage, Content: "\n"})
-
-	for _, tc := range toolCalls {
+	merged, _ := schema.ConcatMessages(toolCallMsgs)
+	for _, tc := range merged.ToolCalls {
 		_ = sess.Emit(session.Event{
 			Type:    session.TypeToolCall,
-			Content: fmt.Sprintf("🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
+			Content: fmt.Sprintf("\n🔧 [tool call] -> %s\t%s\n", tc.Function.Name, tc.Function.Arguments),
 		})
 	}
 
 	return &schema.Message{
-		Role:      schema.Assistant,
-		Content:   contentBuf.String(),
-		ToolCalls: toolCalls,
+		Role:             schema.Assistant,
+		Content:          contentBuf.String(),
+		ReasoningContent: reasoningBuf.String(), // 如果思考过程不需要回传，可以忽略（deepseek需要）
+		ToolCalls:        merged.ToolCalls,
 	}, nil
 }
 
@@ -370,6 +375,11 @@ func (r *Runtime) handleRegularMessage(mv *adk.MessageVariant, sess *session.Ses
 	if mv.Message == nil {
 		return nil
 	}
+
+	if mv.Message.ReasoningContent != "" {
+		_ = sess.Emit(session.Event{Type: session.TypeReasoning, Content: mv.Message.ReasoningContent})
+	}
+
 	_ = sess.Emit(session.Event{Type: session.TypeAssistant, Content: mv.Message.Content})
 
 	for _, tc := range mv.Message.ToolCalls {

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"aimc-go/assistant/approval"
 	"aimc-go/assistant/session"
 	"bufio"
 	"context"
@@ -54,7 +53,7 @@ func NewCLI(sessionID string, sink session.Sink, scanner *bufio.Scanner) *sessio
 		approved := response == "y" || response == "yes"
 		return &session.InputEvent{
 			Type: session.InputApproval,
-			Data: &approval.Result{Approved: approved},
+			Data: &session.ApprovalResult{Approved: approved},
 		}, nil
 	}
 

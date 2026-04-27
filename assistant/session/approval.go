@@ -1,4 +1,4 @@
-package approval
+package session
 
 import (
 	"fmt"
@@ -6,23 +6,23 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// Result 审批结果
-type Result struct {
-	ApprovalID       string // 审批 ID，用于匹配中断
+// ApprovalResult 审批结果
+type ApprovalResult struct {
+	ApprovalID       string
 	Approved         bool
 	DisapproveReason *string
 }
 
-// Info 审批信息，会展示给用户
-type Info struct {
+// ApprovalInfo 审批信息，会展示给用户
+type ApprovalInfo struct {
 	ToolName        string
 	ArgumentsInJSON string
 }
 
-func (ai *Info) String() string {
+func (ai *ApprovalInfo) String() string {
 	return fmt.Sprintf("⚠️ Approval Required\nTool: %s\nArguments: %s\nApprove? (y/n): ", ai.ToolName, ai.ArgumentsInJSON)
 }
 
 func init() {
-	schema.Register[*Info]()
+	schema.Register[*ApprovalInfo]()
 }

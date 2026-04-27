@@ -2,7 +2,6 @@ package server
 
 import (
 	"aimc-go/app/modules/core"
-	"aimc-go/assistant/approval"
 	"aimc-go/assistant/runtime"
 	"aimc-go/assistant/session"
 	"context"
@@ -44,7 +43,7 @@ func (h *SSEHub) Acquire(ctx context.Context, sessionID string, w http.ResponseW
 }
 
 // SubmitApproval 提交审批结果，阻塞等待 session 接收
-func (h *SSEHub) SubmitApproval(sessionID string, result *approval.Result) error {
+func (h *SSEHub) SubmitApproval(sessionID string, result *session.ApprovalResult) error {
 	sess, ok := h.sessions.Load(sessionID)
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
@@ -158,7 +157,7 @@ func (m *SSEModule) approval(c *gin.Context) {
 		return
 	}
 
-	result := &approval.Result{
+	result := &session.ApprovalResult{
 		ApprovalID:       req.ApprovalID,
 		Approved:         req.Approved,
 		DisapproveReason: nil,

@@ -4,13 +4,13 @@ package session
 type EventType string
 
 const (
-	TypeAssistant   EventType = "assistant"
-	TypeToolCall    EventType = "tool_call"
-	TypeToolResult  EventType = "tool_result"
-	TypeMessage     EventType = "message"
+	TypeAssistant   EventType = "assistant"       // 助手回复
+	TypeReasoning   EventType = "reasoning"       // 思考过程
+	TypeToolCall    EventType = "tool_call"       // 工具调用
+	TypeToolResult  EventType = "tool_result"     // 工具结果
 	TypeApproval    EventType = "approval"        // 审批请求
 	TypeApprovalRes EventType = "approval_result" // 审批结果
-	TypeDone        EventType = "done"            // 对话结束信号
+	TypeMessage     EventType = "message"         // 普通消息
 )
 
 // Event 输出事件

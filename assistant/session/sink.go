@@ -38,8 +38,14 @@ func NewStdoutSink() Sink {
 }
 
 func (s *StdoutSink) Handle(e Event) error {
-	_, err := fmt.Print(e.Content)
-	return err
+	switch e.Type {
+	case TypeReasoning:
+		_, err := fmt.Print("\033[90m" + e.Content + "\033[0m")
+		return err
+	default:
+		_, err := fmt.Print(e.Content)
+		return err
+	}
 }
 
 // SSESink SSE 推送
