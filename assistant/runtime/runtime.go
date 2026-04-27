@@ -296,7 +296,7 @@ func (r *Runtime) handleMessage(mv *adk.MessageVariant, sess *session.Session) (
 		}
 		_ = sess.Emit(session.Event{
 			Type:    session.TypeToolResult,
-			Content: fmt.Sprintf("✅ [tool result] -> %s\t%s\n", mv.ToolName, truncate(result.Content, 200)),
+			Content: fmt.Sprintf("✅ [tool result] -> %s\n%s\n", mv.ToolName, truncate(result.Content, 200)),
 		})
 		return result, nil, nil
 	}
