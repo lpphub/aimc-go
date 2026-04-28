@@ -34,12 +34,12 @@ func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, 
 	sumMW, err := summarization.New(ctx, &summarization.Config{
 		Model: chatModel,
 		Trigger: &summarization.TriggerCondition{
-			ContextTokens: 190000,
+			ContextTokens: 850000,
 		},
-		PreserveUserMessages: &summarization.PreserveUserMessages{
-			Enabled:   true,
-			MaxTokens: 50000,
-		},
+		//PreserveUserMessages: &summarization.PreserveUserMessages{
+		//	Enabled:   true,
+		//	MaxTokens: 50000,
+		//},
 	})
 	if err != nil {
 		return nil, err

@@ -20,7 +20,7 @@ type ApprovalInfo struct {
 }
 
 func (ai *ApprovalInfo) String() string {
-	return fmt.Sprintf("⚠️ Approval Required\nTool: %s\nArguments: %s\nApprove? (y/n): ", ai.ToolName, ai.ArgumentsInJSON)
+	return fmt.Sprintf("⏳Approval Required\nTool: %s\nArguments: %s\nApprove? (y/n): ", ai.ToolName, ai.ArgumentsInJSON)
 }
 
 func init() {

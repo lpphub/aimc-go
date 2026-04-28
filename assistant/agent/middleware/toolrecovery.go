@@ -12,13 +12,17 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// toolRecoveryMiddleware 将可恢复的工具错误转为文本回送 LLM，
+// ToolRecoveryMiddleware 将可恢复的工具错误转为文本回送 LLM，
 // 避免工具执行失败直接中断对话。LLM 收到错误文本后可自主重试或调整参数。
-type toolRecoveryMiddleware struct {
+type ToolRecoveryMiddleware struct {
 	*adk.BaseChatModelAgentMiddleware
 }
 
-func (m *toolRecoveryMiddleware) WrapInvokableToolCall(_ context.Context, endpoint adk.InvokableToolCallEndpoint, _ *adk.ToolContext) (adk.InvokableToolCallEndpoint, error) {
+func NewToolRecoveryMiddleware() *ToolRecoveryMiddleware {
+	return &ToolRecoveryMiddleware{}
+}
+
+func (m *ToolRecoveryMiddleware) WrapInvokableToolCall(_ context.Context, endpoint adk.InvokableToolCallEndpoint, _ *adk.ToolContext) (adk.InvokableToolCallEndpoint, error) {
 	return func(ctx context.Context, args string, opts ...tool.Option) (string, error) {
 		result, err := endpoint(ctx, args, opts...)
 		if err != nil {
@@ -34,7 +38,7 @@ func (m *toolRecoveryMiddleware) WrapInvokableToolCall(_ context.Context, endpoi
 	}, nil
 }
 
-func (m *toolRecoveryMiddleware) WrapStreamableToolCall(_ context.Context, endpoint adk.StreamableToolCallEndpoint, _ *adk.ToolContext) (adk.StreamableToolCallEndpoint, error) {
+func (m *ToolRecoveryMiddleware) WrapStreamableToolCall(_ context.Context, endpoint adk.StreamableToolCallEndpoint, _ *adk.ToolContext) (adk.StreamableToolCallEndpoint, error) {
 	return func(ctx context.Context, args string, opts ...tool.Option) (*schema.StreamReader[string], error) {
 		sr, err := endpoint(ctx, args, opts...)
 		if err != nil {
