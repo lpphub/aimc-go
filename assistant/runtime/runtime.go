@@ -323,29 +323,29 @@ func (r *Runtime) handleStreamingMessage(mv *adk.MessageVariant, sess *session.S
 	var toolCallMsgs []*schema.Message
 
 	for {
-		frame, err := mv.MessageStream.Recv()
+		chunk, err := mv.MessageStream.Recv()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return nil, err
 		}
-		if frame == nil {
+		if chunk == nil {
 			continue
 		}
 
-		if frame.Content != "" {
-			contentBuf.WriteString(frame.Content)
-			_ = sess.Emit(session.Event{Type: session.TypeAssistant, Content: frame.Content})
+		if chunk.Content != "" {
+			contentBuf.WriteString(chunk.Content)
+			_ = sess.Emit(session.Event{Type: session.TypeAssistant, Content: chunk.Content})
 		}
 
-		if frame.ReasoningContent != "" {
-			reasoningBuf.WriteString(frame.ReasoningContent)
-			_ = sess.Emit(session.Event{Type: session.TypeReasoning, Content: frame.ReasoningContent})
+		if chunk.ReasoningContent != "" {
+			reasoningBuf.WriteString(chunk.ReasoningContent)
+			_ = sess.Emit(session.Event{Type: session.TypeReasoning, Content: chunk.ReasoningContent})
 		}
 
-		if len(frame.ToolCalls) > 0 {
-			for _, tc := range frame.ToolCalls {
+		if len(chunk.ToolCalls) > 0 {
+			for _, tc := range chunk.ToolCalls {
 				toolCallMsgs = append(toolCallMsgs, &schema.Message{
 					Role:      mv.Role,
 					ToolCalls: []schema.ToolCall{tc},
