@@ -19,7 +19,7 @@ type Transport interface {
 	Close()
 }
 
-// InputSink 支持外部向 transport 注入输入事件
+// InputSink 支持外部向 transport 注入输入事件（SSE、WebSocket ）
 type InputSink interface {
 	Accept(ctx context.Context, ev InputEvent) error
 }
@@ -126,31 +126,4 @@ func (t *SSETransport) Close() {
 	t.closeOnce.Do(func() {
 		close(t.closed)
 	})
-}
-
-type MultiTransport struct {
-	Transports []Transport
-}
-
-func NewMultiTransport(ts ...Transport) *MultiTransport {
-	return &MultiTransport{Transports: ts}
-}
-
-func (m *MultiTransport) Emit(e Event) error {
-	for _, t := range m.Transports {
-		if err := t.Emit(e); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (m *MultiTransport) WaitInput(ctx context.Context) (InputEvent, error) {
-	return m.Transports[0].WaitInput(ctx)
-}
-
-func (m *MultiTransport) Close() {
-	for _, t := range m.Transports {
-		t.Close()
-	}
 }
