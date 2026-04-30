@@ -17,7 +17,7 @@
 │  ┌─────────────────┐              ┌─────────────────────┐    │
 │  │   NewCLI()      │              │    SSEHub           │    │
 │  │  - OnInput 回调 │              │  - Acquire/Release  │    │
-│  │  - StdoutSink │              │  - SubmitApproval() │    │
+│  │  - StdoutSink   │              │  - SubmitApproval() │    │
 │  └─────────────────┘              │  - SSESink          │    │
 │           │                        └─────────────────────┘    │
 │           │                                 │                │
@@ -30,14 +30,14 @@
 │                                                              │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │                       Runtime                          │  │
-│  │  - Run(ctx, session, query)                           │  │
-│  │  - Resume(ctx, session, checkpointID, resumeData)     │  │
-│  │  - processEvents() → handleAgentEvent()               │  │
-│  │  - handleInterrupt() → session.WaitInput()            │  │
+│  │  - Run(ctx, session, query, ...AgentRunOption)         │  │
+│  │  - Resume(ctx, session, checkpointID, resumeData)      │  │
+│  │  - Generate(ctx, messages, ...AgentRunOption)         │  │
+│  │  - Events(ctx, messages, ...AgentRunOption)           │  │
 │  │                                                        │  │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌───────────────┐  │  │
 │  │  │   Store     │  │    Agent    │  │ CheckPointStore│  │  │
-│  │  │   (注入)    │  │   (注入)    │  │    (注入)      │  │  │
+│  │  │   (注入)    │  │   (注入)    │  │    (内置)      │  │  │
 │  │  └─────────────┘  └─────────────┘  └───────────────┘  │  │
 │  └───────────────────────────────────────────────────────┘  │
 │                                                              │
@@ -45,7 +45,7 @@
 │  │                       Session                          │  │
 │  │  - ID, Sink, InputChan, OnInput                        │  │
 │  │  - WaitInput() - 阻塞等待输入（审批/用户干预）         │  │
-│  │  - Emit(), Close()                                   │  │
+│  │  - Emit(), Close()                                    │  │
 │  └───────────────────────────────────────────────────────┘  │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
@@ -56,7 +56,7 @@
 │                                                              │
 │  Sink: StdoutSink, SSESink                                   │
 │  Store: JSONLStore                                           │
-│  Approval: Info, Result                                      │
+│  Types: ApprovalInfo, ApprovalResult                         │
 │  Agent: agent.New()                                          │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
@@ -66,37 +66,49 @@
 
 ```
 assistant/
-├── cmd/
-│   └── agent/main.go          # CLI 入口（调用 server.RunCLI）
-│
-├── server/                    # 入口层
-│   ├── cli.go                 # RunCLI + NewCLI builder
-│   ├── sse.go                 # SSEModule + SSEHub
-│   └── runtime.go             # NewRuntime 创建
-│
-├── session/                   # 数据结构层
-│   ├── session.go             # Session + New(withChan) + 方法
-│   ├── input.go               # InputEvent + InputType
-│   ├── event.go               # Event + EventType
-│   └── sink.go                # Sink 接口 + 实现
-│
-├── runtime/                   # 运行时核心
-│   └── runtime.go             # Runtime 结构 + Run/Resume + 事件处理方法
-│
-├── store/                     # 存储层
-│   ├── store.go               # Store 接口
-│   └── jsonl.go               # JSONLStore 实现
-│
-├── approval/                  # 审批模块
-│   └── approval.go            # Info + Result
-│
-├── agent/                     # Agent 配置
-│   ├── agent.go               # Agent 创建
+├── agent/                     # Agent 配置与组装
+│   ├── agent.go               # Agent 创建入口
 │   ├── config.go              # Config + 函数式选项
 │   ├── llm/                   # LLM 提供者
-│   ├── middleware/            # 中间件
-│   ├── tools/                 # 工具
-│   └── prompts/               # 提示词
+│   │   └── provider.go
+│   ├── middleware/             # 中间件
+│   │   ├── init.go             # 中间件组装
+│   │   ├── builtin.go          # 内置中间件（summarization, filesystem 等）
+│   │   ├── approval.go         # 审批中间件
+│   │   └── toolrecovery.go     # 工具错误恢复中间件
+│   ├── tools/                  # 工具
+│   │   ├── init.go             # 工具注册
+│   │   ├── rag.go              # RAG 文档问答工具
+│   │   └── time.go             # 当前时间工具
+│   ├── prompts/                # 提示词模板
+│   │   └── template.go
+│   └── callback/               # 用量统计
+│       └── usage.go
+│
+├── runtime/                   # 运行时核心
+│   ├── runtime.go              # Runtime 结构 + New/Run/Resume/Generate/Events
+│   ├── events.go               # 事件消费管道（drain, handleEvent, handleAction）
+│   ├── handler.go              # 消息处理 + 审批处理
+│   └── utils.go                # trimRounds, truncate
+│
+├── server/                    # 入口层
+│   ├── bootstrap.go            # NewRuntime 组装
+│   ├── cli.go                  # RunCLI + NewCLI
+│   ├── sse.go                  # SSEModule + SSEHub
+│   └── sse.html                # SSE 测试页面
+│
+├── session/                   # 会话数据结构 & I/O 通道
+│   ├── session.go              # Session + New(withChan)
+│   ├── input.go                # InputEvent + InputType
+│   ├── event.go                # Event + EventType
+│   └── sink.go                 # Sink 接口 + StdoutSink/SSESink/MultiSink
+│
+├── store/                     # 消息持久化
+│   ├── store.go                # Store 接口
+│   └── jsonl.go                # JSONLStore 实现
+│
+├── types/                     # 跨层共享领域类型
+│   └── approval.go             # ApprovalInfo + ApprovalResult
 │
 └── README.md
 ```
@@ -129,19 +141,24 @@ session.New(sessionID, sink, false)
 
 ### Runtime（服务层核心）
 
-Runtime 是服务层唯一入口，管理完整会话生命周期。
+Runtime 是服务层核心，管理完整会话生命周期。
 
 ```go
 type Runtime struct {
-    agent           adk.Agent
+    runner          *adk.Runner
     store           store.Store
     checkpointStore adk.CheckPointStore
+    maxRounds       int
 }
 ```
 
 **关键方法：**
-- `Run(ctx, session, query)` - 执行一轮对话
+- `Run(ctx, session, query, ...AgentRunOption)` - 执行一轮对话
 - `Resume(ctx, session, checkpointID, resumeData)` - 恢复中断的对话
+- `Generate(ctx, messages, ...AgentRunOption)` - 原始 API，返回事件迭代器
+- `Events(ctx, messages, ...AgentRunOption)` - 便利 API，返回事件 channel
+
+`AgentRunOption` 透传至 `adk.Runner`，支持 `WithCallbacks`、`WithChatModelOptions`、`WithHistoryModifier` 等。
 
 ### Sink（事件输出接口）
 
@@ -163,13 +180,13 @@ type Event struct {
 | 类型 | 说明 |
 |------|------|
 | `TypeAssistant` | AI 助手回复内容 |
+| `TypeReasoning` | 思考过程 |
 | `TypeToolCall` | 工具调用请求 |
 | `TypeToolResult` | 工具执行结果 |
 | `TypeMessage` | 系统消息 |
 | `TypeApproval` | 审批请求 |
 | `TypeApprovalRes` | 审批结果通知 |
 | `TypeError` | 错误信息 |
-| `TypeDone` | 对话结束信号 |
 
 ## 数据流
 
@@ -187,7 +204,7 @@ type Event struct {
        ▼
      Runtime.Run(ctx, session, query)
        │
-       ├──→ Runtime.drain() → session.Emit() → StdoutSink
+       ├──→ drain() → session.Emit() → StdoutSink
        │
        └→ handleInterrupt() → session.WaitInput() → OnInput()
        
@@ -230,26 +247,6 @@ HTTP POST /approval
 func main() {
     server.RunCLI()
 }
-
-// 内部实现（server/cli.go）
-func RunCLI() {
-    rt, _ := NewRuntime()
-    ctx := context.Background()
-    scanner := bufio.NewScanner(os.Stdin)
-    sessionID := uuid.New().String()
-    
-    sess := NewCLI(sessionID, session.NewStdoutSink(), scanner)
-    
-    for {
-        fmt.Print("👤: ")
-        if !scanner.Scan() {
-            break
-        }
-        query := strings.TrimSpace(scanner.Text())
-        
-        rt.Run(ctx, sess, query)
-    }
-}
 ```
 
 ### SSE 模式
@@ -261,36 +258,22 @@ module, _ := server.NewSSE()
 // HTTP Handler（server/sse.go 已实现）
 func (m *SSEModule) Routes(r *gin.RouterGroup) {
     assistant := r.Group("/assistant")
-    assistant.GET("", m.ssePage)       // SSE 页面
-    assistant.POST("/chat", m.chat)    // 聊天接口
-    assistant.POST("/approval", m.approval)  // 审批接口
+    assistant.GET("", m.ssePage)
+    assistant.POST("/chat", m.chat)
+    assistant.POST("/approval", m.approval)
 }
+```
 
-// 内部实现
-func (m *SSEModule) chat(c *gin.Context) {
-    // 设置 SSE headers
-    c.Header("Content-Type", "text/event-stream")
-    
-    sess, _ := m.hub.Acquire(ctx, sessionID, c.Writer, flusher)
-    
-    go func() {
-        defer sess.Close()
-        defer m.hub.Release(sessionID)
-        m.rt.Run(ctx, sess, query)
-    }()
-    
-    <-ctx.Done()
-}
+### 直接使用 Runtime
 
-func (m *SSEModule) approval(c *gin.Context) {
-    var req ApprovalRequest
-    json.NewDecoder(c.Request.Body).Decode(&req)
-    
-    m.hub.SubmitApproval(req.SessionID, &approval.Result{
-        ApprovalID: req.ApprovalID,
-        Approved:   req.Approved,
-    })
-}
+```go
+rt, _ := runtime.New(agent, runtime.WithStore(store), runtime.WithMaxRounds(30))
+
+// 基本对话
+rt.Run(ctx, sess, "hello")
+
+// 带运行选项
+rt.Run(ctx, sess, "hello", adk.WithCallbacks(handler))
 ```
 
 ## 扩展点
@@ -298,10 +281,11 @@ func (m *SSEModule) approval(c *gin.Context) {
 | 扩展需求 | 实现方式 |
 |---------|---------|
 | 新交互模式（如 WebSocket） | 实现 Sink 接口，在 server 包添加对应的 Hub 和 builder |
-| 新输出格式（如 WebSocket） | 实现 Sink 接口 |
+| 新输出格式 | 实现 Sink 接口 |
 | 新存储后端（如 Redis） | 实现 Store 接口 |
-| 新消息类型 | 添加 EventType 常量，在 Runtime.handleEvent() 中处理 |
+| 新消息类型 | 添加 EventType 常量，在 events.go handleEvent() 中处理 |
 | 自定义 Agent 配置 | 使用 `agent.WithProjectRoot()`, `agent.WithSkillDir()` 等选项 |
+| 运行时回调/参数 | 透传 `adk.AgentRunOption` 到 `Run`/`Generate`/`Events` |
 
 ## Agent 配置
 
@@ -326,6 +310,7 @@ ag, _ := agent.New(ctx,
 |------|------|
 | `WithProjectRoot(path)` | 设置项目根目录（用于 Prompt 模板中的绝对路径） |
 | `WithSkillDir(path)` | 设置 Skill 目录（为空则不启用 Skill 中间件） |
+| `WithPlanTaskDir(path)` | 设置 Plan Task 目录 |
 | `WithModel(m)` | 自定义 LLM 模型 |
 | `WithTools(tools)` | 自定义工具集 |
 | `WithMiddlewares(mw)` | 自定义中间件 |
@@ -336,4 +321,5 @@ ag, _ := agent.New(ctx,
 2. **Sink 单向简单**，不承担审批逻辑，只做输出。
 3. **Runtime 统一生命周期**，CLI 和 SSE 差异封装在 server 包。
 4. **并发安全**，Sink 实现必须线程安全，Session.Close 使用 sync.Once。
-5. **包职责清晰**，session 包只定义数据结构，server 包管理入口和连接。
+5. **包职责清晰**，session 包只定义 I/O 结构，types 包放跨层领域类型，server 包管理入口和连接。
+6. **AgentRunOption 透传**，Runtime 的 Run/Generate/Events 接受 `...adk.AgentRunOption`，允许调用方注入回调、修改模型参数等。

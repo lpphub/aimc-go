@@ -42,13 +42,18 @@ func (s *UsageStats) AddDuration(d time.Duration) {
 }
 
 func (s *UsageStats) Report() {
-	fmt.Printf(
-		"\n 📊 Usage：Call Counts: %d, Prompt Tokens: %d, Completion Tokens: %d, Total Tokens: %d, Duration(ms): %d \n",
+	fmt.Printf("\033[1;36m━━━━━━━━━━ 📊 Usage Stats ━━━━━━━━━━\033[0m\n"+
+		"  Calls        : \033[36m%-10d\033[0m\n"+
+		"  Prompt       : \033[33m%-10d\033[0m tokens\n"+
+		"  Completion   : \033[33m%-10d\033[0m tokens\n"+
+		"  Total        : \033[31m%-10d\033[0m tokens\n"+
+		"  Duration     : \033[32m%-10.3f\033[0m s\n"+
+		"\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n",
 		s.CallCounts.Load(),
 		s.PromptTokens.Load(),
 		s.CompletionTokens.Load(),
 		s.TotalTokens.Load(),
-		s.DurationMs.Load(),
+		float64(s.DurationMs.Load())/1000,
 	)
 }
 

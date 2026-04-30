@@ -3,6 +3,7 @@ package server
 import (
 	"aimc-go/assistant/agent/callback"
 	"aimc-go/assistant/session"
+	"aimc-go/assistant/types"
 	"bufio"
 	"context"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// RunCLI 运行 CLI 模式
 func RunCLI() {
 	rt, err := NewRuntime()
 	if err != nil {
@@ -21,10 +21,11 @@ func RunCLI() {
 		os.Exit(1)
 	}
 
+	// 全局用量统计
 	stats := &callback.UsageStats{}
 	ctx := callback.WithUsageStats(context.Background(), stats)
-	// 全局用量统计
-	callbacks.AppendGlobalHandlers(callback.NewUsageHandler())
+	usageCallback := callback.NewUsageHandler()
+	callbacks.AppendGlobalHandlers(usageCallback)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	sessionID := uuid.New().String()
@@ -61,7 +62,7 @@ func NewCLI(sessionID string, sink session.Sink, scanner *bufio.Scanner) *sessio
 		approved := response == "y" || response == "yes"
 		return &session.InputEvent{
 			Type: session.InputApproval,
-			Data: &session.ApprovalResult{Approved: approved},
+			Data: &types.ApprovalResult{Approved: approved},
 		}, nil
 	}
 

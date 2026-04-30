@@ -1,4 +1,4 @@
-package session
+package types
 
 import (
 	"fmt"
@@ -6,14 +6,12 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// ApprovalResult 审批结果
 type ApprovalResult struct {
 	ApprovalID       string
 	Approved         bool
 	DisapproveReason *string
 }
 
-// ApprovalInfo 审批信息，会展示给用户
 type ApprovalInfo struct {
 	ToolName        string
 	ArgumentsInJSON string

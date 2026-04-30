@@ -7,7 +7,6 @@ import (
 	"context"
 )
 
-// NewRuntime 创建 Runtime（公共方法）
 func NewRuntime() (*runtime.Runtime, error) {
 	ctx := context.Background()
 
