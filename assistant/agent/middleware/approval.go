@@ -10,7 +10,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// ApprovalMiddleware 审批中间件
 type ApprovalMiddleware struct {
 	*adk.BaseChatModelAgentMiddleware
 	toolsToApprove map[string]bool // 需要审批的 Tool 名称
@@ -36,7 +35,6 @@ func (m *ApprovalMiddleware) checkApproval(ctx context.Context, args string) (st
 	return storedArgs, result
 }
 
-// WrapInvokableToolCall 拦截同步 Tool 调用
 func (m *ApprovalMiddleware) WrapInvokableToolCall(_ context.Context, endpoint adk.InvokableToolCallEndpoint, tCtx *adk.ToolContext) (adk.InvokableToolCallEndpoint, error) {
 	if !m.toolsToApprove[tCtx.Name] {
 		return endpoint, nil

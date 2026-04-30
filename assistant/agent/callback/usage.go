@@ -12,12 +12,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-//
-// =========================
-// UsageStats（global / external injected）
-// =========================
-//
-
 type usageStatsKey struct{}
 
 type UsageStats struct {
@@ -57,12 +51,6 @@ func (s *UsageStats) Report() {
 	)
 }
 
-//
-// =========================
-// ctx helpers（强烈推荐）
-// =========================
-//
-
 func WithUsageStats(ctx context.Context, stats *UsageStats) context.Context {
 	return context.WithValue(ctx, usageStatsKey{}, stats)
 }
@@ -71,12 +59,6 @@ func getStats(ctx context.Context) (*UsageStats, bool) {
 	v, ok := ctx.Value(usageStatsKey{}).(*UsageStats)
 	return v, ok
 }
-
-//
-// =========================
-// usageState（per-call）
-// =========================
-//
 
 type usageStateKey struct{}
 
@@ -92,7 +74,6 @@ func NewUsageHandler() callbacks.Handler {
 				return ctx
 			}
 
-			// stats（必须外部注入）
 			if stats, ok := getStats(ctx); ok {
 				stats.CallCounts.Add(1)
 			}
@@ -102,7 +83,6 @@ func NewUsageHandler() callbacks.Handler {
 				return ctx
 			}
 
-			// ctx state
 			ctx = context.WithValue(ctx, usageStateKey{}, &usageState{
 				start:     time.Now(),
 				msgCounts: len(in.Messages),

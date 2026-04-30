@@ -74,7 +74,6 @@ func (m *ToolRecoveryMiddleware) WrapStreamableToolCall(_ context.Context, endpo
 	}, nil
 }
 
-// isFatalError 判断错误是否应直接终止而非重试。
 func isFatalError(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }

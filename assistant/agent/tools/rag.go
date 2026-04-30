@@ -58,53 +58,37 @@ import (
 	"github.com/cloudwego/eino-examples/compose/batch/batch"
 )
 
-// Input is the tool call argument struct. Its JSON tags are used by utils.InferTool
-// to generate the tool's parameter schema automatically.
 type Input struct {
 	FilePath string `json:"file_path" jsonschema:"description=Absolute path to the uploaded document file"`
 	Question string `json:"question"  jsonschema:"description=The question to answer from the document"`
 }
 
-// Output is the structured result returned by the tool.
 type Output struct {
 	Answer  string   `json:"answer"`
 	Sources []string `json:"sources"` // key excerpts used to produce the answer
 }
 
-// scoreTask is the per-chunk input fed into the inner BatchNode workflow.
 type scoreTask struct {
 	Text     string
 	Question string
 }
 
-// scoredChunk is the per-chunk result produced by the inner BatchNode workflow.
 type scoredChunk struct {
 	Text    string
 	Score   int    // 0–10 relevance to the question
 	Excerpt string // most relevant sentence or phrase from this chunk
 }
 
-// scoreIn is the input to the outer "score" Lambda node.
-// It is assembled by field mapping from two sources:
-//   - Chunks: full output of "chunk" node ([]*schema.Document)
-//   - Question: Question field of START (Input)
 type scoreIn struct {
 	Chunks   []*schema.Document
 	Question string
 }
 
-// synthIn is the input to the "synthesize" Lambda node.
-// It is assembled by field mapping from two sources:
-//   - TopK: full output of "filter" node ([]scoredChunk)
-//   - Question: Question field of START (Input)
 type synthIn struct {
 	TopK     []scoredChunk
 	Question string
 }
 
-// BuildRAGTool constructs the answer_from_document tool backed by the RAG workflow.
-// It uses graphtool.NewInvokableGraphTool, which compiles the workflow per invocation
-// and supports interrupt/resume via a built-in checkpoint store.
 func BuildRAGTool(ctx context.Context, cm model.BaseChatModel) (tool.BaseTool, error) {
 	wf := buildWorkflow(cm)
 	return graphtool.NewInvokableGraphTool[Input, Output](
@@ -116,8 +100,6 @@ func BuildRAGTool(ctx context.Context, cm model.BaseChatModel) (tool.BaseTool, e
 	)
 }
 
-// buildWorkflow constructs the RAG compose.Workflow (uncompiled).
-// graphtool.NewInvokableGraphTool compiles it per invocation.
 func buildWorkflow(cm model.BaseChatModel) *compose.Workflow[Input, Output] {
 	scoreWF := newScoreWorkflow(cm)
 	scorer := batch.NewBatchNode(&batch.NodeConfig[scoreTask, scoredChunk]{
@@ -128,7 +110,6 @@ func buildWorkflow(cm model.BaseChatModel) *compose.Workflow[Input, Output] {
 
 	wf := compose.NewWorkflow[Input, Output]()
 
-	// load: read file from disk, emit a single Document.
 	wf.AddLambdaNode("load", compose.InvokableLambda(
 		func(ctx context.Context, in Input) ([]*schema.Document, error) {
 			data, err := os.ReadFile(in.FilePath)
@@ -139,7 +120,6 @@ func buildWorkflow(cm model.BaseChatModel) *compose.Workflow[Input, Output] {
 		},
 	)).AddInput(compose.START)
 
-	// chunk: split each Document into ~800-char pieces.
 	wf.AddLambdaNode("chunk", compose.InvokableLambda(
 		func(ctx context.Context, docs []*schema.Document) ([]*schema.Document, error) {
 			var out []*schema.Document
@@ -150,10 +130,6 @@ func buildWorkflow(cm model.BaseChatModel) *compose.Workflow[Input, Output] {
 		},
 	)).AddInput("load")
 
-	// score: score each chunk against the question in parallel via BatchNode.
-	// Chunks comes from "chunk"; Question comes directly from START.
-	// Both use WithNoDirectDependency because the execution order is already
-	// established by the direct edges START→load→chunk→score.
 	wf.AddLambdaNode("score", compose.InvokableLambda(
 		func(ctx context.Context, in scoreIn) ([]scoredChunk, error) {
 			tasks := make([]scoreTask, len(in.Chunks))
@@ -170,7 +146,6 @@ func buildWorkflow(cm model.BaseChatModel) *compose.Workflow[Input, Output] {
 			[]*compose.FieldMapping{compose.MapFields("Question", "Question")},
 			compose.WithNoDirectDependency())
 
-	// filter: sort descending by score, keep up to top-3 chunks with score ≥ 3.
 	wf.AddLambdaNode("filter", compose.InvokableLambda(
 		func(ctx context.Context, scored []scoredChunk) ([]scoredChunk, error) {
 			sort.Slice(scored, func(i, j int) bool {
@@ -191,9 +166,6 @@ func buildWorkflow(cm model.BaseChatModel) *compose.Workflow[Input, Output] {
 		},
 	)).AddInput("score")
 
-	// answer: synthesize a response from top-k chunks, or return a not-found message if empty.
-	// TopK comes from "filter"; Question comes directly from START.
-	// Both use WithNoDirectDependency: "filter" governs execution order via its direct edge.
 	wf.AddLambdaNode("answer", compose.InvokableLambda(
 		func(ctx context.Context, in synthIn) (Output, error) {
 			if len(in.TopK) == 0 {
@@ -211,15 +183,12 @@ func buildWorkflow(cm model.BaseChatModel) *compose.Workflow[Input, Output] {
 			[]*compose.FieldMapping{compose.MapFields("Question", "Question")},
 			compose.WithNoDirectDependency())
 
-	// END receives output from answer.
 	wf.End().
 		AddInput("answer")
 
 	return wf
 }
 
-// newScoreWorkflow builds the single-node inner workflow used by each BatchNode task.
-// It is intentionally trivial: BatchNode provides the parallelism, not the inner graph.
 func newScoreWorkflow(cm model.BaseChatModel) *compose.Workflow[scoreTask, scoredChunk] {
 	wf := compose.NewWorkflow[scoreTask, scoredChunk]()
 	wf.AddLambdaNode("score_chunk", compose.InvokableLambda(
@@ -231,9 +200,7 @@ func newScoreWorkflow(cm model.BaseChatModel) *compose.Workflow[scoreTask, score
 	return wf
 }
 
-// scoreOneChunk asks the model to rate the relevance of a single chunk (0–10)
-// and extract the most relevant excerpt. Parse errors are treated as score 0
-// so a bad JSON response never aborts the pipeline.
+// scoreOneChunk: parse errors are treated as score 0 so a bad JSON response never aborts the pipeline.
 func scoreOneChunk(ctx context.Context, cm model.BaseChatModel, t scoreTask) (scoredChunk, error) {
 	prompt := fmt.Sprintf(`Rate how relevant the following text chunk is to the question.
 
@@ -250,12 +217,10 @@ Score guide: 0=completely irrelevant, 3=tangentially related, 7=clearly relevant
 
 	resp, err := cm.Generate(ctx, []*schema.Message{schema.UserMessage(prompt)})
 	if err != nil {
-		// treat model error as irrelevant rather than aborting the batch
 		return scoredChunk{Text: t.Text, Score: 0}, nil
 	}
 
 	content := strings.TrimSpace(resp.Content)
-	// strip optional markdown code block wrapper
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimPrefix(content, "```")
 	content = strings.TrimSuffix(content, "```")
@@ -271,7 +236,6 @@ Score guide: 0=completely irrelevant, 3=tangentially related, 7=clearly relevant
 	return scoredChunk{Text: t.Text, Score: sr.Score, Excerpt: sr.Excerpt}, nil
 }
 
-// synthesize builds a prompt from the top-k chunks and generates a cited answer.
 func synthesize(ctx context.Context, cm model.BaseChatModel, in synthIn) (Output, error) {
 	var sb strings.Builder
 	sb.WriteString("Answer the following question using only the provided document excerpts.\n\n")
@@ -297,8 +261,6 @@ func synthesize(ctx context.Context, cm model.BaseChatModel, in synthIn) (Output
 	return Output{Answer: resp.Content, Sources: sources}, nil
 }
 
-// splitIntoChunks splits text into chunks of at most chunkSize characters,
-// breaking on paragraph boundaries (\n\n) where possible, then on newlines.
 func splitIntoChunks(text string, chunkSize int) []*schema.Document {
 	var chunks []*schema.Document
 	var buf strings.Builder

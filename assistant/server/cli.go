@@ -3,7 +3,6 @@ package server
 import (
 	"aimc-go/assistant/agent/callback"
 	"aimc-go/assistant/session"
-	"aimc-go/assistant/types"
 	"bufio"
 	"context"
 	"fmt"
@@ -30,7 +29,7 @@ func RunCLI() {
 	scanner := bufio.NewScanner(os.Stdin)
 	sessionID := uuid.New().String()
 
-	sess := NewCLI(sessionID, session.NewStdoutSink(), scanner)
+	sess := session.New(sessionID, session.NewCLITransport(scanner))
 
 	for {
 		fmt.Print("👤: ")
@@ -48,23 +47,4 @@ func RunCLI() {
 
 		stats.Report()
 	}
-}
-
-// NewCLI 创建 CLI 场景的 Session
-func NewCLI(sessionID string, sink session.Sink, scanner *bufio.Scanner) *session.Session {
-	sess := session.New(sessionID, sink, false)
-
-	sess.OnInput = func(ctx context.Context) (*session.InputEvent, error) {
-		if !scanner.Scan() {
-			return nil, scanner.Err()
-		}
-		response := strings.TrimSpace(scanner.Text())
-		approved := response == "y" || response == "yes"
-		return &session.InputEvent{
-			Type: session.InputApproval,
-			Data: &types.ApprovalResult{Approved: approved},
-		}, nil
-	}
-
-	return sess
 }

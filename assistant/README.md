@@ -15,11 +15,10 @@
 │           │                                 │                │
 │           ▼                                 ▼                │
 │  ┌─────────────────┐              ┌─────────────────────┐    │
-│  │   NewCLI()      │              │    SSEHub           │    │
-│  │  - OnInput 回调 │              │  - Acquire/Release  │    │
-│  │  - StdoutSink   │              │  - SubmitApproval() │    │
-│  └─────────────────┘              │  - SSESink          │    │
-│           │                        └─────────────────────┘    │
+│  │ CLITransport    │              │    SSEHub           │    │
+│  │ - stdin scanner │              │  - Acquire/Release  │    │
+│  │ - stdout 输出   │              │  - SubmitApproval() │    │
+│  └─────────────────┘              └─────────────────────┘    │
 │           │                                 │                │
 └───────────┼─────────────────────────────────┼────────────────┘
             │         ┌───────────────────────┤
@@ -43,9 +42,10 @@
 │                                                              │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │                       Session                          │  │
-│  │  - ID, Sink, InputChan, OnInput                        │  │
+│  │  - ID, Transport                                       │  │
+│  │  - Emit() - 向客户端推送事件                           │  │
 │  │  - WaitInput() - 阻塞等待输入（审批/用户干预）         │  │
-│  │  - Emit(), Close()                                    │  │
+│  │  - Close() - 关闭传输层                                │  │
 │  └───────────────────────────────────────────────────────┘  │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
@@ -54,7 +54,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                       Infrastructure Layer                   │
 │                                                              │
-│  Sink: StdoutSink, SSESink                                   │
+│  Transport: CLITransport, SSETransport, MultiTransport       │
 │  Store: JSONLStore                                           │
 │  Types: ApprovalInfo, ApprovalResult                         │
 │  Agent: agent.New()                                          │
@@ -86,22 +86,19 @@ assistant/
 │       └── usage.go
 │
 ├── runtime/                   # 运行时核心
-│   ├── runtime.go              # Runtime 结构 + New/Run/Resume/Generate/Events
-│   ├── events.go               # 事件消费管道（drain, handleEvent, handleAction）
-│   ├── handler.go              # 消息处理 + 审批处理
-│   └── utils.go                # trimRounds, truncate
+│   ├── runtime.go              # Runtime 结构 + New/Run/Resume/Generate/Events + 工具函数
+│   └── events.go               # 事件消费管道 + 消息处理 + 审批处理
 │
 ├── server/                    # 入口层
 │   ├── bootstrap.go            # NewRuntime 组装
-│   ├── cli.go                  # RunCLI + NewCLI
+│   ├── cli.go                  # RunCLI
 │   ├── sse.go                  # SSEModule + SSEHub
 │   └── sse.html                # SSE 测试页面
 │
-├── session/                   # 会话数据结构 & I/O 通道
-│   ├── session.go              # Session + New(withChan)
-│   ├── input.go                # InputEvent + InputType
+├── session/                   # 会话数据结构 & 传输层
+│   ├── session.go              # Session + New
 │   ├── event.go                # Event + EventType
-│   └── sink.go                 # Sink 接口 + StdoutSink/SSESink/MultiSink
+│   └── transport.go            # Transport 接口 + CLITransport/SSETransport/MultiTransport
 │
 ├── store/                     # 消息持久化
 │   ├── store.go                # Store 接口
@@ -115,29 +112,53 @@ assistant/
 
 ## 核心组件
 
-### Session（双向交互容器）
+### Transport（传输层抽象）
 
-Session 是一轮会话的交互容器，封装输出通道和输入通道。
+Transport 统一了 session 的输入输出，每种实现对应一种传输方式，内部持有该方式所需的全部资源。
+
+```go
+type Transport interface {
+    Emit(Event) error                                // 向客户端推送事件
+    WaitInput(ctx context.Context) (InputEvent, error) // 阻塞等待客户端输入
+    Close()                                          // 关闭传输层，释放资源
+}
+```
+
+**内置实现：**
+
+| 实现 | 输出 | 输入 | 场景 |
+|------|------|------|------|
+| `CLITransport` | stdout | stdin scanner | 终端交互 |
+| `SSETransport` | HTTP SSE 帧 | channel（Submit 注入） | Web 推送 |
+| `MultiTransport` | 广播到所有子 Transport | 委托给第一个 | 多路输出 |
+
+```go
+// CLI
+transport := session.NewCLITransport(scanner)
+sess := session.New(sessionID, transport)
+
+// SSE
+transport := session.NewSSETransport(ctx, w, flusher)
+sess := session.New(sessionID, transport)
+```
+
+扩展新传输方式只需实现 `Transport` 接口。
+
+### Session（会话容器）
+
+Session 是一轮会话的交互容器，持有 ID 和 Transport。
 
 ```go
 type Session struct {
     ID        string
-    Sink      Sink               // 输出通道
-    InputChan chan InputEvent     // withChan=true: channel 输入
-    OnInput   func(...)           // withChan=false: 阻塞回调
+    Transport Transport
 }
-
-// withChan=true: channel 输入（SSE/WebSocket）
-session.New(sessionID, sink, true)
-
-// withChan=false: 阻塞回调 OnInput（CLI）
-session.New(sessionID, sink, false)
 ```
 
 **关键方法：**
-- `WaitInput(ctx)` - 阻塞等待输入（审批结果或用户干预）
-- `Emit(event)` - 发送输出事件
-- `Close()` - 关闭会话（线程安全）
+- `Emit(event)` - 向客户端推送事件（委托 Transport）
+- `WaitInput(ctx)` - 阻塞等待输入（委托 Transport）
+- `Close()` - 关闭传输层（委托 Transport）
 
 ### Runtime（服务层核心）
 
@@ -160,15 +181,9 @@ type Runtime struct {
 
 `AgentRunOption` 透传至 `adk.Runner`，支持 `WithCallbacks`、`WithChatModelOptions`、`WithHistoryModifier` 等。
 
-### Sink（事件输出接口）
-
-Sink 是事件输出接口，遵循 Go Handler 惯例，实现必须是并发安全的。
+### Event（事件模型）
 
 ```go
-type Sink interface {
-    Handle(Event) error
-}
-
 type Event struct {
     Type    EventType      `json:"type"`
     Content string         `json:"content"`
@@ -186,7 +201,6 @@ type Event struct {
 | `TypeMessage` | 系统消息 |
 | `TypeApproval` | 审批请求 |
 | `TypeApprovalRes` | 审批结果通知 |
-| `TypeError` | 错误信息 |
 
 ## 数据流
 
@@ -196,17 +210,17 @@ type Event struct {
 用户输入 (stdin)
        │
        ▼
-  server.NewCLI(sessionID, StdoutSink, scanner)
+  CLITransport(scanner)
        │
        ▼
-     Session (OnInput: 读 stdin)
+     Session
        │
        ▼
      Runtime.Run(ctx, session, query)
        │
-       ├──→ drain() → session.Emit() → StdoutSink
+       ├──→ drain() → session.Emit() → CLITransport.Emit() → stdout
        │
-       └→ handleInterrupt() → session.WaitInput() → OnInput()
+       └→ handleInterrupt() → session.WaitInput() → CLITransport.WaitInput()
        
      返回循环等待下一轮输入
 ```
@@ -217,15 +231,15 @@ type Event struct {
 HTTP POST /chat
        │
        ▼
-  SSEHub.Acquire(sessionID, sink, flusher)
+  SSEHub.Acquire(sessionID, transport)
        │
        ▼
-     Session (InputChan: channel)
+     Session (Transport: SSETransport)
        │
        ▼
      Runtime.Run() (goroutine)
        │
-       └──→ session.Emit() → SSESink → SSE 推送
+       └──→ session.Emit() → SSETransport.Emit() → SSE 推送
 
 HTTP POST /approval
        │
@@ -233,7 +247,7 @@ HTTP POST /approval
   SSEHub.SubmitApproval()
        │
        ▼
-     InputChan ←─── 解除 WaitInput 阻塞
+     SSETransport.Submit() ─── 解除 WaitInput 阻塞
        │
        ▼
   Runtime.Resume() → 继续执行
@@ -280,8 +294,7 @@ rt.Run(ctx, sess, "hello", adk.WithCallbacks(handler))
 
 | 扩展需求 | 实现方式 |
 |---------|---------|
-| 新交互模式（如 WebSocket） | 实现 Sink 接口，在 server 包添加对应的 Hub 和 builder |
-| 新输出格式 | 实现 Sink 接口 |
+| 新交互模式（如 WebSocket） | 实现 Transport 接口，在 server 包添加对应的 Hub |
 | 新存储后端（如 Redis） | 实现 Store 接口 |
 | 新消息类型 | 添加 EventType 常量，在 events.go handleEvent() 中处理 |
 | 自定义 Agent 配置 | 使用 `agent.WithProjectRoot()`, `agent.WithSkillDir()` 等选项 |
@@ -317,9 +330,8 @@ ag, _ := agent.New(ctx,
 
 ## 设计原则
 
-1. **Session = 会话**，不是单轮对话。Session 在多轮对话期间保持。
-2. **Sink 单向简单**，不承担审批逻辑，只做输出。
+1. **Transport 统一输入输出**，每种传输方式实现一个 Transport，内聚该方式的全部 I/O 逻辑。
+2. **Session = 会话**，不是单轮对话。Session 在多轮对话期间保持。
 3. **Runtime 统一生命周期**，CLI 和 SSE 差异封装在 server 包。
-4. **并发安全**，Sink 实现必须线程安全，Session.Close 使用 sync.Once。
-5. **包职责清晰**，session 包只定义 I/O 结构，types 包放跨层领域类型，server 包管理入口和连接。
-6. **AgentRunOption 透传**，Runtime 的 Run/Generate/Events 接受 `...adk.AgentRunOption`，允许调用方注入回调、修改模型参数等。
+4. **包职责清晰**，session 包只定义传输层抽象和会话结构，types 包放跨层领域类型，server 包管理入口和连接。
+5. **AgentRunOption 透传**，Runtime 的 Run/Generate/Events 接受 `...adk.AgentRunOption`，允许调用方注入回调、修改模型参数等。

@@ -14,7 +14,6 @@ import (
 	"github.com/cloudwego/eino/components/model"
 )
 
-// setupBuiltInMiddleware 初始化内置中间件
 func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, cfg Config) ([]adk.ChatModelAgentMiddleware, error) {
 	backend, err := local.NewBackend(ctx, &local.Config{})
 	if err != nil {
@@ -23,14 +22,12 @@ func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, 
 
 	var middlewares []adk.ChatModelAgentMiddleware
 
-	// patch tool calls
 	patchMW, err := patchtoolcalls.New(ctx, &patchtoolcalls.Config{})
 	if err != nil {
 		return nil, err
 	}
 	middlewares = append(middlewares, patchMW)
 
-	// summarization
 	sumMW, err := summarization.New(ctx, &summarization.Config{
 		Model: chatModel,
 		Trigger: &summarization.TriggerCondition{
@@ -46,14 +43,12 @@ func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, 
 	}
 	middlewares = append(middlewares, sumMW)
 
-	// reduction
 	reductionMW, err := reduction.New(ctx, &reduction.Config{Backend: backend})
 	if err != nil {
 		return nil, err
 	}
 	middlewares = append(middlewares, reductionMW)
 
-	// filesystem
 	fsMW, err := filesystem.New(ctx, &filesystem.MiddlewareConfig{
 		Backend:        backend,
 		StreamingShell: backend,
@@ -63,7 +58,6 @@ func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, 
 	}
 	middlewares = append(middlewares, fsMW)
 
-	// skills (可选)
 	if cfg.SkillDir != "" {
 		skillBackend, _ := skill.NewBackendFromFilesystem(ctx, &skill.BackendFromFilesystemConfig{
 			Backend: backend,
@@ -78,7 +72,6 @@ func setupBuiltInMiddleware(ctx context.Context, chatModel model.BaseChatModel, 
 		middlewares = append(middlewares, skillMW)
 	}
 
-	// plantask
 	if cfg.PlanTaskDir != "" {
 		ptw, err := plantask.New(ctx, &plantask.Config{
 			Backend: &planTaskBackend{Local: backend}, // 必需：存储后端

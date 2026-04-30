@@ -16,10 +16,8 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
-// DefaultCacheSize 默认缓存容量
 const DefaultCacheSize = 128
 
-// conversation 内部结构体（用于缓存和文件存储）
 type conversation struct {
 	ID        string
 	CreatedAt time.Time
@@ -29,12 +27,10 @@ type conversation struct {
 type JSONLStore struct {
 	Dir       string
 	cache     *lru.Cache[string, *conversation]
-	convLocks sync.Map // conversationID -> *sync.Mutex (细粒度锁)
+	convLocks sync.Map // conversationID -> *sync.Mutex
 }
 
-// NewJSONLStore creates a new JSONLStore with the given directory path.
 func NewJSONLStore(dir string) *JSONLStore {
-	// 确保目录存在
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		log.Printf("warn: failed to create store dir: %v", err)
 	}
@@ -47,59 +43,43 @@ func NewJSONLStore(dir string) *JSONLStore {
 	}
 }
 
-// getConvLock 获取指定 conversation 的独立锁
 func (s *JSONLStore) getConvLock(id string) *sync.Mutex {
 	lock, _ := s.convLocks.LoadOrStore(id, &sync.Mutex{})
 	return lock.(*sync.Mutex)
 }
 
-// Get 获取历史消息，不存在返回空切片
 func (s *JSONLStore) Get(_ context.Context, sessionID string) ([]*schema.Message, error) {
-	// 1. 快速缓存检查（无锁读取）
 	if conv, ok := s.cache.Get(sessionID); ok {
 		return conv.Messages, nil
 	}
 
-	// 2. 获取该 conversation 的独立锁
 	lock := s.getConvLock(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	// 3. 再次检查缓存（double-check）
-	if conv, ok := s.cache.Get(sessionID); ok {
-		return conv.Messages, nil
-	}
-
-	// 4. 检查文件是否存在
 	filePath := filepath.Join(s.Dir, sessionID+".jsonl")
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return nil, nil // 不存在返回空切片
+		return nil, nil
 	}
 
-	// 5. 从文件加载
 	conv, err := s.loadConversation(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	// 6. 加入缓存
 	s.cache.Add(sessionID, conv)
 
 	return conv.Messages, nil
 }
 
-// Append 追加消息，自动创建（如果不存在）
 func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*schema.Message) error {
-	// 1. 获取该 conversation 的独立锁
 	lock := s.getConvLock(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	// 2. 获取 conversation（从缓存或文件），但不加入缓存
 	conv, cached := s.cache.Get(sessionID)
 	if !cached {
 		filePath := filepath.Join(s.Dir, sessionID+".jsonl")
-		// 文件不存在则创建新的 conversation
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			now := time.Now().UTC()
 			conv = &conversation{
@@ -107,7 +87,6 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 				CreatedAt: now,
 				Messages:  make([]*schema.Message, 0),
 			}
-			// 写入 header
 			header := map[string]interface{}{
 				"type":       "conversation",
 				"id":         sessionID,
@@ -121,7 +100,6 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 				return err
 			}
 		} else {
-			// 文件存在则加载
 			var err error
 			conv, err = s.loadConversation(filePath)
 			if err != nil {
@@ -130,7 +108,6 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 		}
 	}
 
-	// 3. 先写文件（全部写入并 flush 成功后，才更新缓存）
 	filePath := filepath.Join(s.Dir, sessionID+".jsonl")
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -152,12 +129,10 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 		}
 	}
 
-	// flush 落盘后才算写入成功
 	if err = writer.Flush(); err != nil {
 		return err
 	}
 
-	// 4. 文件写入成功，再更新缓存
 	conv.Messages = append(conv.Messages, messages...)
 	if !cached {
 		s.cache.Add(sessionID, conv)
@@ -166,7 +141,6 @@ func (s *JSONLStore) Append(_ context.Context, sessionID string, messages ...*sc
 	return nil
 }
 
-// loadConversation 从 JSONL 文件加载 conversation
 func (s *JSONLStore) loadConversation(filePath string) (*conversation, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -179,7 +153,6 @@ func (s *JSONLStore) loadConversation(filePath string) (*conversation, error) {
 		return nil, fmt.Errorf("empty conversation file: %s", filePath)
 	}
 
-	// 解析 header
 	var header struct {
 		Type      string    `json:"type"`
 		ID        string    `json:"id"`
@@ -195,7 +168,6 @@ func (s *JSONLStore) loadConversation(filePath string) (*conversation, error) {
 		Messages:  make([]*schema.Message, 0),
 	}
 
-	// 解析消息
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {

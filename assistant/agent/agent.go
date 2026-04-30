@@ -13,7 +13,6 @@ import (
 	"github.com/cloudwego/eino/compose"
 )
 
-// New 创建默认 Agent
 func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 	cfg := defaultConfig()
 	for _, opt := range opts {
@@ -22,7 +21,6 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 
 	var err error
 
-	// 1. model
 	if cfg.Model == nil {
 		cfg.Model, err = llm.NewChatModel(ctx)
 		if err != nil {
@@ -30,7 +28,6 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 		}
 	}
 
-	// 2. tools
 	if cfg.Tools == nil {
 		cfg.Tools, err = tools.InitTools(cfg.Model)
 		if err != nil {
@@ -38,7 +35,6 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 		}
 	}
 
-	// 3. middlewares
 	if cfg.Middlewares == nil {
 		cfg.Middlewares, err = middleware.SetupMiddlewares(ctx, cfg.Model, middleware.Config{
 			SkillDir:    cfg.SkillDir,
@@ -49,7 +45,6 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 		}
 	}
 
-	// 4. instruction
 	if cfg.Instruction == "" {
 		if cfg.ProjectRoot != "" {
 			cfg.Instruction = prompts.GetEinoAssistant(cfg.ProjectRoot)
@@ -58,7 +53,6 @@ func New(ctx context.Context, opts ...Option) (adk.Agent, error) {
 		}
 	}
 
-	// 5. build agent
 	return buildAgent(ctx, cfg)
 }
 

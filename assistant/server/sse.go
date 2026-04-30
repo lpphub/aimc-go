@@ -2,9 +2,9 @@ package server
 
 import (
 	"aimc-go/app/modules/core"
-	"aimc-go/assistant/types"
 	"aimc-go/assistant/runtime"
 	"aimc-go/assistant/session"
+	"aimc-go/assistant/types"
 	"context"
 	"embed"
 	"errors"
@@ -23,7 +23,7 @@ var staticFS embed.FS
 
 // SSEHub 管理 SSE 场景的 Session
 type SSEHub struct {
-	sessions sync.Map // sessionID -> *Session (无锁并发访问)
+	sessions sync.Map // sessionID -> *session.Session
 }
 
 func NewSSEHub() *SSEHub {
@@ -32,45 +32,46 @@ func NewSSEHub() *SSEHub {
 
 // Acquire 获取或创建 Session，如果会话忙则返回错误
 func (h *SSEHub) Acquire(ctx context.Context, sessionID string, w http.ResponseWriter, flusher http.Flusher) (*session.Session, error) {
-	sess := session.New(sessionID, session.NewSSESink(ctx, w, flusher), true)
+	if _, exists := h.sessions.Load(sessionID); exists {
+		return nil, fmt.Errorf("session %s is busy", sessionID)
+	}
 
-	// sync.Map 的 LoadOrStore 是原子操作
+	sess := session.New(sessionID, session.NewSSETransport(ctx, w, flusher))
 	actual, loaded := h.sessions.LoadOrStore(sessionID, sess)
 	if loaded {
 		return nil, fmt.Errorf("session %s is busy", sessionID)
 	}
-
 	return actual.(*session.Session), nil
 }
 
-// SubmitApproval 提交审批结果，阻塞等待 session 接收
+// SubmitApproval 提交审批结果
 func (h *SSEHub) SubmitApproval(sessionID string, result *types.ApprovalResult) error {
-	sess, ok := h.sessions.Load(sessionID)
+	val, ok := h.sessions.Load(sessionID)
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
 
-	s := sess.(*session.Session)
+	sess := val.(*session.Session)
+	transport, ok := sess.Transport.(*session.SSETransport)
+	if !ok {
+		return fmt.Errorf("session %s transport does not support Submit", sessionID)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	select {
-	case s.InputChan <- session.InputEvent{
+	return transport.Submit(ctx, session.InputEvent{
 		Type: session.InputApproval,
 		Data: result,
-	}:
-		return nil
-	case <-s.Closed():
-		return fmt.Errorf("session closed: %s", sessionID)
-	case <-ctx.Done():
-		return fmt.Errorf("timeout waiting for session to receive approval")
-	}
+	})
 }
 
 // Release 释放 Session
 func (h *SSEHub) Release(sessionID string) {
-	h.sessions.Delete(sessionID)
+	val, ok := h.sessions.LoadAndDelete(sessionID)
+	if ok {
+		val.(*session.Session).Close()
+	}
 }
 
 type SSEModule struct {
@@ -98,7 +99,6 @@ func (m *SSEModule) Routes(r *gin.RouterGroup) {
 }
 
 func (m *SSEModule) chat(c *gin.Context) {
-	// 设置 SSE headers
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -108,13 +108,13 @@ func (m *SSEModule) chat(c *gin.Context) {
 		Query     string `json:"query"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.AbortWithError(400, err)
+		_ = c.AbortWithError(400, err)
 		return
 	}
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
-		c.AbortWithError(500, errors.New("streaming unsupported"))
+		_ = c.AbortWithError(500, errors.New("streaming unsupported"))
 		return
 	}
 
@@ -123,26 +123,23 @@ func (m *SSEModule) chat(c *gin.Context) {
 
 	sess, err := m.hub.Acquire(ctx, req.SessionID, c.Writer, flusher)
 	if err != nil {
-		c.AbortWithError(409, err)
+		_ = c.AbortWithError(409, err)
 		return
 	}
 
-	// 异步运行 runtime
 	go func() {
 		defer cancel()
-		defer sess.Close()
 		defer m.hub.Release(req.SessionID)
 
 		err := m.rt.Run(ctx, sess, req.Query)
 		if err != nil {
-			sess.Emit(session.Event{
+			_ = sess.Emit(session.Event{
 				Type:    session.TypeMessage,
 				Content: err.Error(),
 			})
 		}
 	}()
 
-	// 阻塞保持连接（客户端断开或任务完成都会退出）
 	<-ctx.Done()
 }
 
@@ -154,14 +151,13 @@ func (m *SSEModule) approval(c *gin.Context) {
 		Reason     string `json:"reason,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.AbortWithError(400, err)
+		_ = c.AbortWithError(400, err)
 		return
 	}
 
 	result := &types.ApprovalResult{
-		ApprovalID:       req.ApprovalID,
-		Approved:         req.Approved,
-		DisapproveReason: nil,
+		ApprovalID: req.ApprovalID,
+		Approved:   req.Approved,
 	}
 	if req.Reason != "" {
 		result.DisapproveReason = &req.Reason
@@ -169,7 +165,7 @@ func (m *SSEModule) approval(c *gin.Context) {
 
 	err := m.hub.SubmitApproval(req.SessionID, result)
 	if err != nil {
-		c.AbortWithError(404, err)
+		_ = c.AbortWithError(404, err)
 		return
 	}
 

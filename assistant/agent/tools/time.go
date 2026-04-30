@@ -8,19 +8,16 @@ import (
 	"github.com/cloudwego/eino/components/tool/utils"
 )
 
-// TimeInput 时间输入
 type TimeInput struct {
 	Format string `json:"format" jsonschema_description:"时间格式，如 YYYY-MM-DD 或 default"`
 }
 
-// TimeOutput 时间输出
 type TimeOutput struct {
 	Timezone    string `json:"timezone"`
 	CurrentTime string `json:"current_time"`
 	Unix        int64  `json:"unix"`
 }
 
-// NewTimeTool 创建时间工具
 func NewTimeTool() (tool.BaseTool, error) {
 	return utils.InferTool(
 		"current_time",
