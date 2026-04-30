@@ -19,6 +19,11 @@ type Transport interface {
 	Close()
 }
 
+// InputSink 支持外部向 transport 注入输入事件
+type InputSink interface {
+	Accept(ctx context.Context, ev InputEvent) error
+}
+
 type CLITransport struct {
 	scanner *bufio.Scanner
 }
@@ -106,8 +111,7 @@ func (t *SSETransport) WaitInput(ctx context.Context) (InputEvent, error) {
 	}
 }
 
-// Submit 向 transport 注入输入事件（供 approval endpoint 调用）
-func (t *SSETransport) Submit(ctx context.Context, ev InputEvent) error {
+func (t *SSETransport) Accept(ctx context.Context, ev InputEvent) error {
 	select {
 	case t.ch <- ev:
 		return nil

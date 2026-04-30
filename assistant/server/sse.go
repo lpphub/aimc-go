@@ -52,15 +52,15 @@ func (h *SSEHub) SubmitApproval(sessionID string, result *types.ApprovalResult) 
 	}
 
 	sess := val.(*session.Session)
-	transport, ok := sess.Transport.(*session.SSETransport)
+	sink, ok := sess.Transport.(session.InputSink)
 	if !ok {
-		return fmt.Errorf("session %s transport does not support Submit", sessionID)
+		return fmt.Errorf("session %s transport does not support input", sessionID)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	return transport.Submit(ctx, session.InputEvent{
+	return sink.Accept(ctx, session.InputEvent{
 		Type: session.InputApproval,
 		Data: result,
 	})
