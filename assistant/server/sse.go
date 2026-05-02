@@ -25,7 +25,7 @@ func (h *SSEHub) Acquire(ctx context.Context, sessionID string, w http.ResponseW
 		return nil, fmt.Errorf("session %s is busy", sessionID)
 	}
 
-	sess := session.New(sessionID, session.NewSSETransport(ctx, w, flusher))
+	sess := session.New(sessionID, session.NewSSEEndpoint(ctx, w, flusher))
 	actual, loaded := h.sessions.LoadOrStore(sessionID, sess)
 	if loaded {
 		return nil, fmt.Errorf("session %s is busy", sessionID)
@@ -41,9 +41,9 @@ func (h *SSEHub) SubmitApproval(sessionID string, result *types.ApprovalResult) 
 	}
 
 	sess := val.(*session.Session)
-	sink, ok := sess.Transport.(session.InputSink)
+	sink, ok := sess.Endpoint.(session.InputSink)
 	if !ok {
-		return fmt.Errorf("session %s transport does not support input", sessionID)
+		return fmt.Errorf("session %s endpoint does not support input", sessionID)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

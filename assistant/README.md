@@ -15,7 +15,7 @@
 │           │                                 │                │
 │           ▼                                 ▼                │
 │  ┌─────────────────┐              ┌─────────────────────┐    │
-│  │ CLITransport    │              │    SSEHub           │    │
+│  │ CLIEndpoint     │              │    SSEHub           │    │
 │  │ - stdin scanner │              │  - Acquire/Release  │    │
 │  │ - stdout 输出   │              │  - SubmitApproval() │    │
 │  │                 │              │  - InputSink        │    │
@@ -43,7 +43,7 @@
 │                                                              │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │                       Session                          │  │
-│  │  - ID, Transport                                       │  │
+│  │  - ID, Endpoint                                       │  │
 │  │  - Emit() - 向客户端推送事件                           │  │
 │  │  - WaitInput() - 阻塞等待输入（审批/用户干预）         │  │
 │  │  - Close() - 关闭传输层                                │  │
@@ -55,7 +55,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                       Infrastructure Layer                   │
 │                                                              │
-│  Transport: CLITransport, SSETransport, MultiTransport       │
+│  Endpoint: CLIEndpoint, SSEEndpoint                        │
 │  Store: JSONLStore                                           │
 │  Types: ApprovalInfo, ApprovalResult                         │
 │  Agent: agent.New()                                          │
@@ -96,10 +96,10 @@ assistant/
 │   ├── sse.go                  # SSEModule + SSEHub
 │   └── sse.html                # SSE 测试页面
 │
-├── session/                   # 会话数据结构 & 传输层
+├── session/                   # 会话数据结构 & 交互端点
 │   ├── session.go              # Session + New
 │   ├── event.go                # Event + EventType
-│   └── transport.go            # Transport 接口 + CLITransport/SSETransport/MultiTransport
+│   └── endpoint.go              # Endpoint 接口 + CLIEndpoint/SSEEndpoint
 │
 ├── store/                     # 消息持久化
 │   ├── store.go                # Store 接口
@@ -113,18 +113,18 @@ assistant/
 
 ## 核心组件
 
-### Transport（传输层抽象）
+### Endpoint（交互端点抽象）
 
-Transport 统一了 session 的输入输出，每种实现对应一种传输方式，内部持有该方式所需的全部资源。
+Endpoint 统一了 session 的输入输出，每种实现对应一种交互方式，内部持有该方式所需的全部资源。
 
 ```go
-type Transport interface {
+type Endpoint interface {
     Emit(Event) error                                  // 向客户端推送事件
     WaitInput(ctx context.Context) (InputEvent, error) // 阻塞等待客户端输入
-    Close()                                            // 关闭传输层，释放资源
+    Close()                                            // 关闭端点，释放资源
 }
 
-// InputSink 支持外部向 transport 注入输入事件（如审批结果）
+// InputSink 支持外部向 endpoint 注入输入事件（如审批结果）
 type InputSink interface {
     Accept(ctx context.Context, ev InputEvent) error
 }
@@ -134,37 +134,36 @@ type InputSink interface {
 
 | 实现 | 输出 | 输入 | InputSink | 场景 |
 |------|------|------|-----------|------|
-| `CLITransport` | stdout | stdin scanner | - | 终端交互 |
-| `SSETransport` | HTTP SSE 帧 | channel（Accept 注入） | ✅ | Web 推送 |
-| `MultiTransport` | 广播到所有子 Transport | 委托给第一个 | - | 多路输出 |
+| `CLIEndpoint` | stdout | stdin scanner | - | 终端交互 |
+| `SSEEndpoint` | HTTP SSE 帧 | channel（Accept 注入） | ✅ | Web 推送 |
 
 ```go
 // CLI
-transport := session.NewCLITransport(scanner)
-sess := session.New(sessionID, transport)
+endpoint := session.NewCLIEndpoint(scanner)
+sess := session.New(sessionID, endpoint)
 
 // SSE
-transport := session.NewSSETransport(ctx, w, flusher)
-sess := session.New(sessionID, transport)
+endpoint := session.NewSSEEndpoint(ctx, w, flusher)
+sess := session.New(sessionID, endpoint)
 ```
 
-扩展新传输方式只需实现 `Transport` 接口；支持外部输入（如审批）的传输层额外实现 `InputSink`。
+扩展新交互方式只需实现 `Endpoint` 接口；支持外部输入（如审批）的端点额外实现 `InputSink`。
 
 ### Session（会话容器）
 
-Session 是一轮会话的交互容器，持有 ID 和 Transport。
+Session 是一轮会话的交互容器，持有 ID 和 Endpoint。
 
 ```go
 type Session struct {
-    ID        string
-    Transport Transport
+    ID       string
+    Endpoint Endpoint
 }
 ```
 
 **关键方法：**
-- `Emit(event)` - 向客户端推送事件（委托 Transport）
-- `WaitInput(ctx)` - 阻塞等待输入（委托 Transport）
-- `Close()` - 关闭传输层（委托 Transport）
+- `Emit(event)` - 向客户端推送事件（委托 Endpoint）
+- `WaitInput(ctx)` - 阻塞等待输入（委托 Endpoint）
+- `Close()` - 关闭端点（委托 Endpoint）
 
 ### Runtime（服务层核心）
 
@@ -216,7 +215,7 @@ type Event struct {
 用户输入 (stdin)
        │
        ▼
-  CLITransport(scanner)
+  CLIEndpoint(scanner)
        │
        ▼
      Session
@@ -224,9 +223,9 @@ type Event struct {
        ▼
      Runtime.Run(ctx, session, query)
        │
-       ├──→ drain() → session.Emit() → CLITransport.Emit() → stdout
+       ├──→ drain() → session.Emit() → CLIEndpoint.Emit() → stdout
        │
-       └→ handleInterrupt() → session.WaitInput() → CLITransport.WaitInput()
+       └→ handleInterrupt() → session.WaitInput() → CLIEndpoint.WaitInput()
        
      返回循环等待下一轮输入
 ```
@@ -237,15 +236,15 @@ type Event struct {
 HTTP POST /chat
        │
        ▼
-  SSEHub.Acquire(sessionID, transport)
+  SSEHub.Acquire(sessionID, endpoint)
        │
        ▼
-     Session (Transport: SSETransport)
+     Session (Endpoint: SSEEndpoint)
        │
        ▼
      Runtime.Run() (goroutine)
        │
-       └──→ session.Emit() → SSETransport.Emit() → SSE 推送
+       └──→ session.Emit() → SSEEndpoint.Emit() → SSE 推送
 
 HTTP POST /approval
        │
@@ -300,7 +299,7 @@ rt.Run(ctx, sess, "hello", adk.WithCallbacks(handler))
 
 | 扩展需求 | 实现方式 |
 |---------|---------|
-| 新交互模式（如 WebSocket） | 实现 Transport 接口（+ InputSink 如果需要外部输入），在 server 包添加对应 Hub |
+| 新交互模式（如 WebSocket） | 实现 Endpoint 接口（+ InputSink 如果需要外部输入），在 server 包添加对应 Hub |
 | 新存储后端（如 Redis） | 实现 Store 接口 |
 | 新消息类型 | 添加 EventType 常量，在 events.go handleEvent() 中处理 |
 | 自定义 Agent 配置 | 使用 `agent.WithProjectRoot()`, `agent.WithSkillDir()` 等选项 |
@@ -336,7 +335,7 @@ ag, _ := agent.New(ctx,
 
 ## 设计原则
 
-1. **Transport 统一输入输出**，每种传输方式实现一个 Transport，内聚该方式的全部 I/O 逻辑。需要外部输入的传输层实现 `InputSink` 接口。
+1. **Endpoint 统一输入输出**，每种交互方式实现一个 Endpoint，内聚该方式的全部 I/O 逻辑。需要外部输入的端点额外实现 `InputSink` 接口。
 2. **Session = 会话**，不是单轮对话。Session 在多轮对话期间保持。
 3. **Runtime 统一生命周期**，CLI 和 SSE 差异封装在 server 包。
 4. **包职责清晰**，session 包只定义传输层抽象和会话结构，types 包放跨层领域类型，server 包管理入口和连接。

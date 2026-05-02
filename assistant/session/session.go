@@ -5,30 +5,30 @@ import (
 )
 
 type Session struct {
-	ID        string
-	Transport Transport
+	ID       string
+	Endpoint Endpoint
 }
 
-func New(sessionID string, transport Transport) *Session {
+func New(sessionID string, endpoint Endpoint) *Session {
 	return &Session{
-		ID:        sessionID,
-		Transport: transport,
+		ID:       sessionID,
+		Endpoint: endpoint,
 	}
 }
 
 func (s *Session) Emit(event Event) error {
-	if s.Transport != nil {
-		return s.Transport.Emit(event)
+	if s.Endpoint != nil {
+		return s.Endpoint.Emit(event)
 	}
 	return nil
 }
 
 func (s *Session) WaitInput(ctx context.Context) (InputEvent, error) {
-	return s.Transport.WaitInput(ctx)
+	return s.Endpoint.WaitInput(ctx)
 }
 
 func (s *Session) Close() {
-	if s.Transport != nil {
-		s.Transport.Close()
+	if s.Endpoint != nil {
+		s.Endpoint.Close()
 	}
 }

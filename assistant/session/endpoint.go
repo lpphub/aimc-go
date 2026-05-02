@@ -12,27 +12,27 @@ import (
 	"aimc-go/assistant/types"
 )
 
-// Transport 传输层抽象（CLI、SSE、WebSocket 等）
-type Transport interface {
+// Endpoint 交互端点抽象（CLI、SSE、WebSocket 等）
+type Endpoint interface {
 	Emit(Event) error
 	WaitInput(ctx context.Context) (InputEvent, error)
 	Close()
 }
 
-// InputSink 支持外部向 transport 注入输入事件（SSE、WebSocket ）
+// InputSink 支持外部向 endpoint 注入输入事件（SSE、WebSocket ）
 type InputSink interface {
 	Accept(ctx context.Context, ev InputEvent) error
 }
 
-type CLITransport struct {
+type CLIEndpoint struct {
 	scanner *bufio.Scanner
 }
 
-func NewCLITransport(scanner *bufio.Scanner) *CLITransport {
-	return &CLITransport{scanner: scanner}
+func NewCLIEndpoint(scanner *bufio.Scanner) *CLIEndpoint {
+	return &CLIEndpoint{scanner: scanner}
 }
 
-func (t *CLITransport) Emit(e Event) error {
+func (t *CLIEndpoint) Emit(e Event) error {
 	switch e.Type {
 	case TypeReasoning:
 		_, err := fmt.Print("\033[90m" + e.Content + "\033[0m")
@@ -43,7 +43,7 @@ func (t *CLITransport) Emit(e Event) error {
 	}
 }
 
-func (t *CLITransport) WaitInput(ctx context.Context) (InputEvent, error) {
+func (t *CLIEndpoint) WaitInput(ctx context.Context) (InputEvent, error) {
 	if !t.scanner.Scan() {
 		return InputEvent{}, t.scanner.Err()
 	}
@@ -54,9 +54,9 @@ func (t *CLITransport) WaitInput(ctx context.Context) (InputEvent, error) {
 	}, nil
 }
 
-func (t *CLITransport) Close() {}
+func (t *CLIEndpoint) Close() {}
 
-type SSETransport struct {
+type SSEEndpoint struct {
 	w         http.ResponseWriter
 	flusher   http.Flusher
 	ctx       context.Context
@@ -65,8 +65,8 @@ type SSETransport struct {
 	closeOnce sync.Once
 }
 
-func NewSSETransport(ctx context.Context, w http.ResponseWriter, flusher http.Flusher) *SSETransport {
-	return &SSETransport{
+func NewSSEEndpoint(ctx context.Context, w http.ResponseWriter, flusher http.Flusher) *SSEEndpoint {
+	return &SSEEndpoint{
 		w:       w,
 		flusher: flusher,
 		ctx:     ctx,
@@ -75,7 +75,7 @@ func NewSSETransport(ctx context.Context, w http.ResponseWriter, flusher http.Fl
 	}
 }
 
-func (t *SSETransport) Emit(e Event) error {
+func (t *SSEEndpoint) Emit(e Event) error {
 	if t.ctx != nil && t.ctx.Err() != nil {
 		return t.ctx.Err()
 	}
@@ -100,29 +100,29 @@ func (t *SSETransport) Emit(e Event) error {
 	return nil
 }
 
-func (t *SSETransport) WaitInput(ctx context.Context) (InputEvent, error) {
+func (t *SSEEndpoint) WaitInput(ctx context.Context) (InputEvent, error) {
 	select {
 	case ev := <-t.ch:
 		return ev, nil
 	case <-t.closed:
-		return InputEvent{}, fmt.Errorf("transport closed")
+		return InputEvent{}, fmt.Errorf("endpoint closed")
 	case <-ctx.Done():
 		return InputEvent{}, ctx.Err()
 	}
 }
 
-func (t *SSETransport) Accept(ctx context.Context, ev InputEvent) error {
+func (t *SSEEndpoint) Accept(ctx context.Context, ev InputEvent) error {
 	select {
 	case t.ch <- ev:
 		return nil
 	case <-t.closed:
-		return fmt.Errorf("transport closed")
+		return fmt.Errorf("endpoint closed")
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (t *SSETransport) Close() {
+func (t *SSEEndpoint) Close() {
 	t.closeOnce.Do(func() {
 		close(t.closed)
 	})
