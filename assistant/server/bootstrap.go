@@ -10,10 +10,10 @@ import (
 func NewRuntime() (*runtime.Runtime, error) {
 	ctx := context.Background()
 
-	assistantAgent, err := agent.New(ctx,
+	assistantAgent, err := agent.NewDeepAgent(ctx,
 		agent.WithProjectRoot("/Users/lsk/Projects/eino-demo"),
 		agent.WithSkillDir("/Users/lsk/Projects/eino-demo/ext/skills"),
-		agent.WithPlanTaskDir("/Users/lsk/Projects/aimc-go/docs/plans"),
+		//agent.WithPlanTaskDir("/Users/lsk/Projects/aimc-go/docs/plans"),
 	)
 	if err != nil {
 		return nil, err

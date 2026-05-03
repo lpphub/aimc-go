@@ -1,4 +1,4 @@
-package middleware
+package middlewares
 
 import (
 	"aimc-go/assistant/types"
@@ -12,7 +12,7 @@ import (
 
 type ApprovalMiddleware struct {
 	*adk.BaseChatModelAgentMiddleware
-	toolsToApprove map[string]bool // 需要审批的 Tool 名称
+	toolsToApprove map[string]bool
 }
 
 func NewApprovalMiddleware(toolsToApprove ...string) *ApprovalMiddleware {
@@ -25,7 +25,6 @@ func NewApprovalMiddleware(toolsToApprove ...string) *ApprovalMiddleware {
 	return m
 }
 
-// checkApproval 检查审批状态。返回 resumeData 和审批结果（nil 表示需要触发/重新触发中断）
 func (m *ApprovalMiddleware) checkApproval(ctx context.Context, args string) (storedArgs string, result *types.ApprovalResult) {
 	wasInterrupted, _, storedArgs := tool.GetInterruptState[string](ctx)
 	if !wasInterrupted {

@@ -1,4 +1,4 @@
-package middleware
+package middlewares
 
 import (
 	"context"
@@ -12,8 +12,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// ToolRecoveryMiddleware 将可恢复的工具错误转为文本回送 LLM，
-// 避免工具执行失败直接中断对话。LLM 收到错误文本后可自主重试或调整参数。
 type ToolRecoveryMiddleware struct {
 	*adk.BaseChatModelAgentMiddleware
 }
@@ -72,6 +70,13 @@ func (m *ToolRecoveryMiddleware) WrapStreamableToolCall(_ context.Context, endpo
 		}()
 		return r, nil
 	}, nil
+}
+
+func singleChunkReader(msg string) *schema.StreamReader[string] {
+	r, w := schema.Pipe[string](1)
+	_ = w.Send(msg, nil)
+	w.Close()
+	return r
 }
 
 func isFatalError(err error) bool {

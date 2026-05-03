@@ -1,7 +1,7 @@
 package server
 
 import (
-	"aimc-go/assistant/agent/callback"
+	"aimc-go/assistant/agent/callbacks"
 	"aimc-go/assistant/session"
 	"bufio"
 	"context"
@@ -9,7 +9,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cloudwego/eino/callbacks"
 	"github.com/google/uuid"
 )
 
@@ -20,11 +19,8 @@ func RunCLI() {
 		os.Exit(1)
 	}
 
-	// 全局用量统计
-	stats := &callback.UsageStats{}
-	ctx := callback.WithUsageStats(context.Background(), stats)
-	usageCallback := callback.NewUsageHandler()
-	callbacks.AppendGlobalHandlers(usageCallback)
+	cbs := callbacks.Init()
+	ctx := callbacks.WithUsageStats(context.Background(), cbs.UsageStats)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	sessionID := uuid.New().String()
@@ -45,6 +41,6 @@ func RunCLI() {
 			fmt.Fprintln(os.Stderr, err)
 		}
 
-		stats.Report()
+		cbs.UsageStats.Report()
 	}
 }
