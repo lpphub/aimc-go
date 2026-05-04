@@ -21,7 +21,7 @@ func resolveDeps(ctx context.Context, cfg *Config) (*Deps, error) {
 	if cfg.Model != nil {
 		d.Model = cfg.Model
 	} else {
-		m, err := provider.NewProviderFromEnv().NewChatModel(ctx)
+		m, err := provider.NewLLM(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("create model: %w", err)
 		}
