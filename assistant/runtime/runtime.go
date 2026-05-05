@@ -136,7 +136,7 @@ func trimRounds(history []*schema.Message, maxRounds int) []*schema.Message {
 		return history
 	}
 
-	keepStart := 0
+	keepStart := -1
 	userCount := 0
 	for i := len(history) - 1; i >= 0; i-- {
 		if history[i].Role == schema.User {
@@ -148,7 +148,7 @@ func trimRounds(history []*schema.Message, maxRounds int) []*schema.Message {
 		}
 	}
 
-	if keepStart == 0 {
+	if keepStart < 0 {
 		return history
 	}
 
