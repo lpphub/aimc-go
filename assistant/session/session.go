@@ -23,7 +23,7 @@ func (s *Session) Emit(event Event) error {
 	return nil
 }
 
-func (s *Session) WaitInput(ctx context.Context) (InputEvent, error) {
+func (s *Session) WaitInput(ctx context.Context) (*InputEvent, error) {
 	return s.Endpoint.WaitInput(ctx)
 }
 

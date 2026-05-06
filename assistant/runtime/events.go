@@ -194,6 +194,9 @@ func (r *Runtime) handleInterrupt(ctx context.Context, sess *session.Session, in
 		if err != nil {
 			return fmt.Errorf("wait approval input: %w", err)
 		}
+		if input == nil {
+			return fmt.Errorf("input stream ended unexpectedly")
+		}
 
 		if input.Type != session.InputApproval {
 			return fmt.Errorf("unexpected input type: %s", input.Type)

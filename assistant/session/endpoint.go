@@ -15,7 +15,7 @@ import (
 // Endpoint 交互端点抽象（CLI、SSE、WebSocket 等）
 type Endpoint interface {
 	Emit(Event) error
-	WaitInput(ctx context.Context) (InputEvent, error)
+	WaitInput(ctx context.Context) (*InputEvent, error)
 	Close()
 }
 
@@ -43,12 +43,12 @@ func (t *CLIEndpoint) Emit(e Event) error {
 	}
 }
 
-func (t *CLIEndpoint) WaitInput(ctx context.Context) (InputEvent, error) {
+func (t *CLIEndpoint) WaitInput(_ context.Context) (*InputEvent, error) {
 	if !t.scanner.Scan() {
-		return InputEvent{}, t.scanner.Err()
+		return nil, t.scanner.Err()
 	}
 	response := strings.TrimSpace(t.scanner.Text())
-	return InputEvent{
+	return &InputEvent{
 		Type: InputApproval,
 		Data: &types.ApprovalResult{Approved: response == "y" || response == "yes"},
 	}, nil
@@ -100,14 +100,14 @@ func (t *SSEEndpoint) Emit(e Event) error {
 	return nil
 }
 
-func (t *SSEEndpoint) WaitInput(ctx context.Context) (InputEvent, error) {
+func (t *SSEEndpoint) WaitInput(ctx context.Context) (*InputEvent, error) {
 	select {
 	case ev := <-t.ch:
-		return ev, nil
+		return &ev, nil
 	case <-t.closed:
-		return InputEvent{}, fmt.Errorf("endpoint closed")
+		return nil, fmt.Errorf("endpoint closed")
 	case <-ctx.Done():
-		return InputEvent{}, ctx.Err()
+		return nil, ctx.Err()
 	}
 }
 
