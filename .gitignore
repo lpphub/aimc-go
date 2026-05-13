@@ -37,3 +37,6 @@ logs/
 # Temp
 tmp/
 *.tmp
+
+# Data
+data/
