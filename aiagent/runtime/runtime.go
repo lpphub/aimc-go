@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"aimc-go/assistant/session"
-	"aimc-go/assistant/store"
+	"aimc-go/aiagent/session"
+	"aimc-go/aiagent/store"
 	"context"
 	"fmt"
 

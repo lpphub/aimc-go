@@ -13,7 +13,7 @@
 ## Task 1: 重构 `llm/provider.go` — 移除硬编码 API key
 
 **Files:**
-- Modify: `assistant/agent/llm/provider.go`
+- Modify: `aiagent/agent/llm/provider.go`
 
 **Step 1: 将常量改为 Config struct，保留默认值但允许覆盖**
 
@@ -53,14 +53,14 @@ func NewChatModel(ctx context.Context, cfg Config) (model.ToolCallingChatModel, 
 
 **Step 2: 验证编译通过**
 
-Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./assistant/...`
+Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./aiagent/...`
 
 Expected: 编译失败（因为调用方 `tools/tools.go` 和 `agent.go` 的 `llm.NewChatModel(ctx)` 签名变了）— 这是预期的，后续 task 修复。
 
 **Step 3: Commit**
 
 ```bash
-git add assistant/agent/llm/provider.go
+git add aiagent/agent/llm/provider.go
 git commit -m "refactor(llm): replace hardcoded constants with Config struct for dependency injection"
 ```
 
@@ -69,7 +69,7 @@ git commit -m "refactor(llm): replace hardcoded constants with Config struct for
 ## Task 2: 重构 `tools/tools.go` — 接受外部 model，移除内部创建
 
 **Files:**
-- Modify: `assistant/agent/tools/tools.go`
+- Modify: `aiagent/agent/tools/tools.go`
 
 **Step 1: 修改 `InitTools` 签名，接受 model 参数**
 
@@ -123,14 +123,14 @@ func InitTools(cm model.BaseChatModel) ([]tool.BaseTool, error) {
 
 **Step 2: 验证编译**
 
-Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./assistant/...`
+Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./aiagent/...`
 
 Expected: 编译失败（`agent.go` 中调用 `InitTools()` 无参数）
 
 **Step 3: Commit**
 
 ```bash
-git add assistant/agent/tools/tools.go
+git add aiagent/agent/tools/tools.go
 git commit -m "refactor(tools): accept external model in InitTools, remove redundant model creation"
 ```
 
@@ -139,7 +139,7 @@ git commit -m "refactor(tools): accept external model in InitTools, remove redun
 ## Task 3: 重构 `middleware/infra.go` — 移除硬编码 skill 路径
 
 **Files:**
-- Modify: `assistant/agent/middleware/infra.go`
+- Modify: `aiagent/agent/middleware/infra.go`
 
 **Step 1: 将 hardcoded path 改为配置参数**
 
@@ -231,14 +231,14 @@ func skills(ctx context.Context, backend *local.Local, skillDir string) (adk.Cha
 
 **Step 3: 验证编译**
 
-Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./assistant/...`
+Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./aiagent/...`
 
 Expected: 编译失败（`agent.go` 调用 `SetupMiddlewares` 签名变了）
 
 **Step 4: Commit**
 
 ```bash
-git add assistant/agent/middleware/infra.go
+git add aiagent/agent/middleware/infra.go
 git commit -m "refactor(middleware): externalize skill dir config, remove hardcoded paths"
 ```
 
@@ -247,7 +247,7 @@ git commit -m "refactor(middleware): externalize skill dir config, remove hardco
 ## Task 4: 重构 `agent.go` — AgentConfig 注入依赖
 
 **Files:**
-- Modify: `assistant/agent/agent.go`
+- Modify: `aiagent/agent/agent.go`
 
 **Step 1: 重写 agent.go**
 
@@ -255,8 +255,8 @@ git commit -m "refactor(middleware): externalize skill dir config, remove hardco
 package agent
 
 import (
-	"aimc-go/assistant/agent/middleware"
-	"aimc-go/assistant/agent/tools"
+	"aimc-go/aiagent/agent/middleware"
+	"aimc-go/aiagent/agent/tools"
 	"context"
 	"fmt"
 
@@ -341,14 +341,14 @@ func New(ctx context.Context, cfg AgentConfig) (adk.Agent, error) {
 
 **Step 2: 编译检查**
 
-Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./assistant/...`
+Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./aiagent/...`
 
 Expected: 可能编译失败（类型不匹配），根据错误调整 `cfg.Tools` 的类型。
 
 **Step 3: Commit**
 
 ```bash
-git add assistant/agent/agent.go
+git add aiagent/agent/agent.go
 git commit -m "refactor(agent): inject model/tools/middlewares via AgentConfig, remove internal dependency creation"
 ```
 
@@ -357,7 +357,7 @@ git commit -m "refactor(agent): inject model/tools/middlewares via AgentConfig, 
 ## Task 5: 重构 `runner.go` — RunnerConfig 注入 store/sink
 
 **Files:**
-- Modify: `assistant/agent/runner.go`
+- Modify: `aiagent/agent/runner.go`
 
 **Step 1: 重写 runner.go，使用 RunnerOption 模式**
 
@@ -365,8 +365,8 @@ git commit -m "refactor(agent): inject model/tools/middlewares via AgentConfig, 
 package agent
 
 import (
-	"aimc-go/assistant/sink"
-	"aimc-go/assistant/store"
+	"aimc-go/aiagent/sink"
+	"aimc-go/aiagent/store"
 	"context"
 	"strings"
 
@@ -462,33 +462,33 @@ func (r *Runner) processEventStream(ctx context.Context, iter *adk.AsyncIterator
 
 **Step 2: 编译检查**
 
-Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./assistant/...`
+Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./aiagent/...`
 
-Expected: 可能需要调整 `assistant.go` 的调用方式。
+Expected: 可能需要调整 `aiagent.go` 的调用方式。
 
 **Step 3: Commit**
 
 ```bash
-git add assistant/agent/runner.go
+git add aiagent/agent/runner.go
 git commit -m "refactor(runner): inject store/sink via functional options, remove hardcoded defaults from processEventStream"
 ```
 
 ---
 
-## Task 6: 更新 `assistant.go` — 适配新 API
+## Task 6: 更新 `aiagent.go` — 适配新 API
 
 **Files:**
-- Modify: `assistant/assistant.go`
+- Modify: `aiagent/aiagent.go`
 
-**Step 1: 重写 assistant.go，展示新 API 的使用方式**
+**Step 1: 重写 aiagent.go，展示新 API 的使用方式**
 
 ```go
-package assistant
+package aiagent
 
 import (
-	"aimc-go/assistant/agent"
-	"aimc-go/assistant/agent/llm"
-	"aimc-go/assistant/agent/prompts"
+	"aimc-go/aiagent/agent"
+	"aimc-go/aiagent/agent/llm"
+	"aimc-go/aiagent/agent/prompts"
 	"bufio"
 	"context"
 	"fmt"
@@ -552,14 +552,14 @@ func Agent() {
 
 **Step 2: 全量编译验证**
 
-Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./assistant/...`
+Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./aiagent/...`
 
 Expected: PASS
 
 **Step 3: Commit**
 
 ```bash
-git add assistant/assistant.go
+git add aiagent/aiagent.go
 git commit -m "refactor(assistant): adapt to new dependency injection API"
 ```
 
@@ -568,15 +568,15 @@ git commit -m "refactor(assistant): adapt to new dependency injection API"
 ## Task 7: 最终编译 + 清理检查
 
 **Files:**
-- Verify: 整个 `assistant/` 包
+- Verify: 整个 `aiagent/` 包
 
 **Step 1: 全量编译**
 
-Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./assistant/...`
+Run: `cd /home/lsk/projects/aimc-pro/aimc-go && go build ./aiagent/...`
 
 **Step 2: 检查是否有残留硬编码**
 
-Run: `cd /home/lsk/projects/aimc-pro/aimc-go && grep -rn "sk-sp-\|/home/lsk/" assistant/agent/`
+Run: `cd /home/lsk/projects/aimc-pro/aimc-go && grep -rn "sk-sp-\|/home/lsk/" aiagent/agent/`
 
 Expected: 只在 `defaults.go` 或注释中出现（如果有默认值便捷函数的话），核心逻辑中不应有。
 
@@ -592,8 +592,8 @@ git commit -m "refactor: final cleanup of hardcoded values"
 ## 最终目录结构
 
 ```
-assistant/
-  assistant.go              # 调用方：展示 DI 用法
+aiagent/
+  aiagent.go              # 调用方：展示 DI 用法
   agent/
     agent.go                # AgentConfig + New() — 接受依赖注入
     runner.go               # Runner + RunnerOption — 注入 store/sink

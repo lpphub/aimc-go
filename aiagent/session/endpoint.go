@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"aimc-go/assistant/types"
+	"aimc-go/aiagent/types"
 )
 
 // Endpoint 交互端点抽象（CLI、SSE、WebSocket 等）

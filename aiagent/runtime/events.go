@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"aimc-go/assistant/session"
-	"aimc-go/assistant/types"
+	"aimc-go/aiagent/session"
+	"aimc-go/aiagent/types"
 	"context"
 	"errors"
 	"fmt"

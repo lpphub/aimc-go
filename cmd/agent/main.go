@@ -1,6 +1,6 @@
 package main
 
-import "aimc-go/assistant/server"
+import "aimc-go/aiagent/server"
 
 func main() {
 	server.RunCLI()

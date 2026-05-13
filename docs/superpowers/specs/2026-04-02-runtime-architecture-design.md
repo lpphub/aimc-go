@@ -343,7 +343,7 @@ func (b *SSESessionBuilder) SubmitApproval(sessionID string, result *ApprovalRes
 ## File Structure
 
 ```
-assistant/
+aiagent/
 ├── cli.go                    # CLI 入口
 
 ├── runtime/
@@ -374,8 +374,8 @@ assistant/
 
 **删除的文件：**
 
-- `assistant/agent/runner.go` → 合并到 `runtime/runtime.go`
-- `assistant/agent/runner_event.go` → 合并到 `runtime/event.go`
+- `aiagent/agent/runner.go` → 合并到 `runtime/runtime.go`
+- `aiagent/agent/runner_event.go` → 合并到 `runtime/event.go`
 - `EventHandler` struct → 不需要，逻辑合并到 Runtime
 
 ---

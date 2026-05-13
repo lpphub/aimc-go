@@ -7,7 +7,7 @@ import (
 	"aimc-go/app/modules/post"
 	"aimc-go/app/modules/user"
 	"aimc-go/app/server/middleware"
-	"aimc-go/assistant/server"
+	"aimc-go/aiagent/server"
 	"context"
 	"errors"
 	"fmt"

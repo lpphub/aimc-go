@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"aimc-go/assistant/agent/middlewares"
-	agentTools "aimc-go/assistant/agent/tools"
+	"aimc-go/aiagent/agent/middlewares"
+	agentTools "aimc-go/aiagent/agent/tools"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"

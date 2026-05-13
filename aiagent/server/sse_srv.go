@@ -1,10 +1,10 @@
 package server
 
 import (
+	"aimc-go/aiagent/runtime"
+	"aimc-go/aiagent/session"
+	"aimc-go/aiagent/types"
 	"aimc-go/app/modules/core"
-	"aimc-go/assistant/runtime"
-	"aimc-go/assistant/session"
-	"aimc-go/assistant/types"
 	"context"
 	"embed"
 	"errors"
@@ -36,10 +36,10 @@ func NewSSE() (*SSEModule, error) {
 }
 
 func (m *SSEModule) Routes(r *gin.RouterGroup) {
-	assistant := r.Group("/assistant")
+	assistant := r.Group("/")
 	assistant.GET("", m.ssePage)
 	assistant.POST("/chat", m.chat)
-	assistant.POST("/approval", m.approval)
+	assistant.POST("/chat/approval", m.approval)
 }
 
 func (m *SSEModule) chat(c *gin.Context) {

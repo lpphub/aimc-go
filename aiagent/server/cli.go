@@ -1,8 +1,8 @@
 package server
 
 import (
-	"aimc-go/assistant/agent/callbacks"
-	"aimc-go/assistant/session"
+	"aimc-go/aiagent/agent/callbacks"
+	"aimc-go/aiagent/session"
 	"bufio"
 	"context"
 	"fmt"

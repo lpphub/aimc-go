@@ -1,9 +1,9 @@
 package server
 
 import (
-	"aimc-go/assistant/agent"
-	"aimc-go/assistant/runtime"
-	"aimc-go/assistant/store"
+	"aimc-go/aiagent/agent"
+	"aimc-go/aiagent/runtime"
+	"aimc-go/aiagent/store"
 	"context"
 )
 

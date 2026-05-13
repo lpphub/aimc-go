@@ -1,7 +1,7 @@
 package middlewares
 
 import (
-	"aimc-go/assistant/types"
+	"aimc-go/aiagent/types"
 	"context"
 	"fmt"
 

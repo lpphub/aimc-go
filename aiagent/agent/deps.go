@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"aimc-go/assistant/agent/prompt"
-	"aimc-go/assistant/agent/provider"
+	"aimc-go/aiagent/agent/prompt"
+	"aimc-go/aiagent/agent/provider"
 	"context"
 	"fmt"
 

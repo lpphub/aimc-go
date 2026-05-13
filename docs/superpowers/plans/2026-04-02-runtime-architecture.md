@@ -31,7 +31,7 @@
 ## Task 1: Update sink.go with new ChunkTypes
 
 **Files:**
-- Modify: `assistant/sink/sink.go`
+- Modify: `aiagent/sink/sink.go`
 
 - [ ] **Step 1: Add new ChunkType constants**
 
@@ -50,13 +50,13 @@ const (
 
 - [ ] **Step 2: Verify existing code compiles**
 
-Run: `go build ./assistant/sink/...`
+Run: `go build ./aiagent/sink/...`
 Expected: Build succeeds
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add assistant/sink/sink.go
+git add aiagent/sink/sink.go
 git commit -m "feat(sink): add new ChunkTypes for approval and error handling"
 ```
 
@@ -65,7 +65,7 @@ git commit -m "feat(sink): add new ChunkTypes for approval and error handling"
 ## Task 2: Implement SSESink
 
 **Files:**
-- Modify: `assistant/sink/sse.go`
+- Modify: `aiagent/sink/sse.go`
 
 - [ ] **Step 1: Implement SSESink with http.ResponseWriter**
 
@@ -108,13 +108,13 @@ func (s *SSESink) Emit(c Chunk) {
 
 - [ ] **Step 2: Verify code compiles**
 
-Run: `go build ./assistant/sink/...`
+Run: `go build ./aiagent/sink/...`
 Expected: Build succeeds
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add assistant/sink/sse.go
+git add aiagent/sink/sse.go
 git commit -m "feat(sink): implement SSESink with SSE event format"
 ```
 
@@ -123,12 +123,12 @@ git commit -m "feat(sink): implement SSESink with SSE event format"
 ## Task 3: Create runtime directory and session.go
 
 **Files:**
-- Create: `assistant/runtime/session.go`
+- Create: `aiagent/runtime/session.go`
 
 - [ ] **Step 1: Create runtime directory**
 
 ```bash
-mkdir -p assistant/runtime
+mkdir -p aiagent/runtime
 ```
 
 - [ ] **Step 2: Write session.go**
@@ -137,7 +137,7 @@ mkdir -p assistant/runtime
 package runtime
 
 import (
-    "aimc-go/assistant/sink"
+    "aimc-go/aiagent/sink"
     "context"
 
     "github.com/cloudwego/eino/schema"
@@ -225,13 +225,13 @@ func (s *Session) Close() {
 
 - [ ] **Step 3: Verify code compiles**
 
-Run: `go build ./assistant/runtime/...`
+Run: `go build ./aiagent/runtime/...`
 Expected: Build succeeds
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add assistant/runtime/session.go
+git add aiagent/runtime/session.go
 git commit -m "feat(runtime): add Session as bidirectional interaction container"
 ```
 
@@ -240,7 +240,7 @@ git commit -m "feat(runtime): add Session as bidirectional interaction container
 ## Task 4: Create runtime/event.go (event handling methods)
 
 **Files:**
-- Create: `assistant/runtime/event.go`
+- Create: `aiagent/runtime/event.go`
 
 - [ ] **Step 1: Write event.go with private event handling methods**
 
@@ -248,7 +248,7 @@ git commit -m "feat(runtime): add Session as bidirectional interaction container
 package runtime
 
 import (
-    "aimc-go/assistant/sink"
+    "aimc-go/aiagent/sink"
     "context"
     "errors"
     "fmt"
@@ -436,13 +436,13 @@ func (r *Runtime) processEvents(ctx context.Context, session *Session, iter *adk
 
 - [ ] **Step 2: Verify code compiles**
 
-Run: `go build ./assistant/runtime/...`
+Run: `go build ./aiagent/runtime/...`
 Expected: Build succeeds
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add assistant/runtime/event.go
+git add aiagent/runtime/event.go
 git commit -m "feat(runtime): add event handling methods from runner_event.go"
 ```
 
@@ -451,7 +451,7 @@ git commit -m "feat(runtime): add event handling methods from runner_event.go"
 ## Task 5: Create runtime/runtime.go (Runtime struct + Run/Resume)
 
 **Files:**
-- Create: `assistant/runtime/runtime.go`
+- Create: `aiagent/runtime/runtime.go`
 
 - [ ] **Step 1: Write runtime.go**
 
@@ -459,9 +459,9 @@ git commit -m "feat(runtime): add event handling methods from runner_event.go"
 package runtime
 
 import (
-    "aimc-go/assistant/approval"
-    "aimc-go/assistant/sink"
-    "aimc-go/assistant/store"
+    "aimc-go/aiagent/approval"
+    "aimc-go/aiagent/sink"
+    "aimc-go/aiagent/store"
     "context"
     "fmt"
 
@@ -652,13 +652,13 @@ func (r *Runtime) Resume(ctx context.Context, session *Session, checkpointID str
 
 - [ ] **Step 2: Verify code compiles**
 
-Run: `go build ./assistant/runtime/...`
+Run: `go build ./aiagent/runtime/...`
 Expected: Build succeeds
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add assistant/runtime/runtime.go
+git add aiagent/runtime/runtime.go
 git commit -m "feat(runtime): add Runtime struct with Run/Resume methods"
 ```
 
@@ -667,7 +667,7 @@ git commit -m "feat(runtime): add Runtime struct with Run/Resume methods"
 ## Task 6: Create runtime/session_cli.go (CLISessionBuilder)
 
 **Files:**
-- Create: `assistant/runtime/session_cli.go`
+- Create: `aiagent/runtime/session_cli.go`
 
 - [ ] **Step 1: Write session_cli.go**
 
@@ -675,8 +675,8 @@ git commit -m "feat(runtime): add Runtime struct with Run/Resume methods"
 package runtime
 
 import (
-    "aimc-go/assistant/approval"
-    "aimc-go/assistant/sink"
+    "aimc-go/aiagent/approval"
+    "aimc-go/aiagent/sink"
     "bufio"
     "context"
     "fmt"
@@ -717,13 +717,13 @@ func (b *CLISessionBuilder) Build(ctx context.Context, sessionID string) (*Sessi
 
 - [ ] **Step 2: Verify code compiles**
 
-Run: `go build ./assistant/runtime/...`
+Run: `go build ./aiagent/runtime/...`
 Expected: Build succeeds
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add assistant/runtime/session_cli.go
+git add aiagent/runtime/session_cli.go
 git commit -m "feat(runtime): add CLISessionBuilder with OnInput callback"
 ```
 
@@ -732,7 +732,7 @@ git commit -m "feat(runtime): add CLISessionBuilder with OnInput callback"
 ## Task 7: Create runtime/session_sse.go (SSESessionBuilder)
 
 **Files:**
-- Create: `assistant/runtime/session_sse.go`
+- Create: `aiagent/runtime/session_sse.go`
 
 - [ ] **Step 1: Write session_sse.go**
 
@@ -740,8 +740,8 @@ git commit -m "feat(runtime): add CLISessionBuilder with OnInput callback"
 package runtime
 
 import (
-    "aimc-go/assistant/approval"
-    "aimc-go/assistant/sink"
+    "aimc-go/aiagent/approval"
+    "aimc-go/aiagent/sink"
     "context"
     "fmt"
     "net/http"
@@ -799,13 +799,13 @@ func (b *SSESessionBuilder) RemoveSession(sessionID string) {
 
 - [ ] **Step 2: Verify code compiles**
 
-Run: `go build ./assistant/runtime/...`
+Run: `go build ./aiagent/runtime/...`
 Expected: Build succeeds
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add assistant/runtime/session_sse.go
+git add aiagent/runtime/session_sse.go
 git commit -m "feat(runtime): add SSESessionBuilder with InputChan and SubmitApproval"
 ```
 
@@ -814,17 +814,17 @@ git commit -m "feat(runtime): add SSESessionBuilder with InputChan and SubmitApp
 ## Task 8: Update cli.go to use new runtime
 
 **Files:**
-- Modify: `assistant/cli.go`
+- Modify: `aiagent/cli.go`
 
 - [ ] **Step 1: Rewrite cli.go with new architecture**
 
 ```go
-package assistant
+package aiagent
 
 import (
-    "aimc-go/assistant/agent"
-    "aimc-go/assistant/runtime"
-    "aimc-go/assistant/store"
+    "aimc-go/aiagent/agent"
+    "aimc-go/aiagent/runtime"
+    "aimc-go/aiagent/store"
     "bufio"
     "context"
     "fmt"
@@ -835,7 +835,7 @@ import (
 func Cli() {
     ctx := context.Background()
 
-    assistantAgent, err := agent.New(ctx)
+    aiAgent, err := agent.New(ctx)
     if err != nil {
         fmt.Fprint(os.Stderr, err)
         os.Exit(1)
@@ -845,7 +845,7 @@ func Cli() {
     builder := runtime.NewCLISessionBuilder(scanner)
     jsonlStore := store.NewJSONLStore("./data/sessions")
 
-    rt, err := runtime.NewRuntime(assistantAgent, runtime.WithStore(jsonlStore))
+    rt, err := runtime.NewRuntime(aiAgent, runtime.WithStore(jsonlStore))
     if err != nil {
         fmt.Fprint(os.Stderr, err)
         os.Exit(1)
@@ -887,13 +887,13 @@ func Cli() {
 
 - [ ] **Step 2: Verify code compiles**
 
-Run: `go build ./assistant/...`
+Run: `go build ./aiagent/...`
 Expected: Build succeeds
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add assistant/cli.go
+git add aiagent/cli.go
 git commit -m "refactor(cli): use new runtime architecture with SessionBuilder"
 ```
 
@@ -902,12 +902,12 @@ git commit -m "refactor(cli): use new runtime architecture with SessionBuilder"
 ## Task 9: Create api/handler.go (HTTP handlers)
 
 **Files:**
-- Create: `assistant/api/handler.go`
+- Create: `aiagent/api/handler.go`
 
 - [ ] **Step 1: Create api directory**
 
 ```bash
-mkdir -p assistant/api
+mkdir -p aiagent/api
 ```
 
 - [ ] **Step 2: Write handler.go**
@@ -916,9 +916,9 @@ mkdir -p assistant/api
 package api
 
 import (
-    "aimc-go/assistant/approval"
-    "aimc-go/assistant/runtime"
-    "aimc-go/assistant/sink"
+    "aimc-go/aiagent/approval"
+    "aimc-go/aiagent/runtime"
+    "aimc-go/aiagent/sink"
     "context"
     "encoding/json"
     "net/http"
@@ -1026,13 +1026,13 @@ func (h *Handler) Approval(w http.ResponseWriter, r *http.Request) {
 
 - [ ] **Step 3: Verify code compiles**
 
-Run: `go build ./assistant/api/...`
+Run: `go build ./aiagent/api/...`
 Expected: Build succeeds
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add assistant/api/handler.go
+git add aiagent/api/handler.go
 git commit -m "feat(api): add SSE chat and approval HTTP handlers"
 ```
 
@@ -1041,19 +1041,19 @@ git commit -m "feat(api): add SSE chat and approval HTTP handlers"
 ## Task 10: Delete old runner files
 
 **Files:**
-- Delete: `assistant/agent/runner.go`
-- Delete: `assistant/agent/runner_event.go`
+- Delete: `aiagent/agent/runner.go`
+- Delete: `aiagent/agent/runner_event.go`
 
 - [ ] **Step 1: Delete runner.go**
 
 ```bash
-git rm assistant/agent/runner.go
+git rm aiagent/agent/runner.go
 ```
 
 - [ ] **Step 2: Delete runner_event.go**
 
 ```bash
-git rm assistant/agent/runner_event.go
+git rm aiagent/agent/runner_event.go
 ```
 
 - [ ] **Step 3: Verify entire project compiles**

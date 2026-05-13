@@ -1,4 +1,4 @@
-# Assistant - AI Agent Service Layer
+# AI Agent Service Layer
 
 基于 [eino](https://github.com/cloudwego/eino) 的 AI Agent 服务层，支持 CLI 和 SSE 双交互模式。
 
@@ -66,7 +66,7 @@
 ## 文件结构
 
 ```
-assistant/
+aiagent/
 ├── agent/                     # Agent 配置与组装
 │   ├── agent.go               # Agent 创建入口
 │   ├── config.go              # Config + 函数式选项
@@ -276,10 +276,10 @@ module, _ := server.NewSSE()
 
 // HTTP Handler（server/sse.go 已实现）
 func (m *SSEModule) Routes(r *gin.RouterGroup) {
-    assistant := r.Group("/assistant")
-    assistant.GET("", m.ssePage)
-    assistant.POST("/chat", m.chat)
-    assistant.POST("/approval", m.approval)
+    aiagent := r.Group("/assistant")
+    aiagent.GET("", m.ssePage)
+    aiagent.POST("/chat", m.chat)
+    aiagent.POST("/approval", m.approval)
 }
 ```
 
