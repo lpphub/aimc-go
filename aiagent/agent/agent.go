@@ -32,8 +32,8 @@ func NewChatAgent(ctx context.Context, opts ...Option) (adk.Agent, error) {
 
 	mw, err := middlewares.NewChainBuilder(ctx, d.Model, d.Backend).
 		WithPatch().
-		WithSummarization(850000).
 		WithReduction().
+		WithSummarization(850000).
 		WithFilesystem().
 		WithSkill(cfg.SkillDir).
 		WithPlanTask(cfg.PlanTaskDir).
@@ -73,8 +73,8 @@ func NewDeepAgent(ctx context.Context, opts ...Option) (adk.Agent, error) {
 
 	mw, err := middlewares.NewChainBuilder(ctx, d.Model, d.Backend).
 		WithPatch().
-		WithSummarization(850000).
 		WithReduction().
+		WithSummarization(850000).
 		WithSkill(cfg.SkillDir).
 		WithToolRecovery().
 		Build()
